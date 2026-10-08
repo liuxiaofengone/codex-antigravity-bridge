@@ -1,16 +1,20 @@
-# Codex MCP 配置示例。
-# 方式一：codex mcp add codex-agy-bridge -- python -m codex_agy_bridge
-# 方式二：把下面这段合并进 ~/.codex/config.toml 或项目 .codex/config.toml
+# Modified by liuxiaofengone, 2026-10-08: portable interpreter placeholder and tool timeout.
+# Codex MCP configuration template. Copy only this server section into your config.
+# Replace the sample command with the absolute path to the Python used for installation.
+# Windows accepts forward slashes, avoiding TOML backslash escaping.
+# The setup command registers the real interpreter path automatically.
 
 [mcp_servers.codex-agy-bridge]
-command = "python"
+command = "C:/path/to/project/.venv/Scripts/python.exe"
 args = ["-m", "codex_agy_bridge"]
 startup_timeout_sec = 120
-# These values are per-user. Use the installer to detect them, or replace PORT
-# with the port used by the local proxy application.
+tool_timeout_sec = 1200
+
+# Proxy and CLI paths are per-user. Omit this section if it is unnecessary.
+# Replace PORT with your proxy port; never include usernames or passwords.
 # [mcp_servers.codex-agy-bridge.env]
 # HTTP_PROXY = "http://127.0.0.1:PORT"
 # HTTPS_PROXY = "http://127.0.0.1:PORT"
 # ALL_PROXY = "http://127.0.0.1:PORT"
 # NO_PROXY = "localhost,127.0.0.1"
-# AGY_PATH = "C:\\path\\to\\agy.exe"
+# AGY_PATH = "C:/path/to/agy.exe"

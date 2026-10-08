@@ -25,6 +25,8 @@
 
 </div>
 
+> 本派生版本由 **liuxiaofengone** 于 2026-10-08 修改，基于 [crazyzhang277 的原项目](https://github.com/crazyzhang277/codex-antigravity-bridge)，保留原项目历史和 Apache-2.0 许可证。新增 Windows MCP 输入管道兼容修复及回归测试，并提供 [Windows 安装与委派指南](docs/windows-setup.zh-CN.md)。本页安装命令已调整为先安装依赖、再预览和注册配置。
+
 > [!IMPORTANT]
 > **仅使用命令行。** 本项目只调用 Antigravity 的无界面 `agy` 命令行，不启动、嵌入或控制 Antigravity 桌面应用。
 
@@ -50,7 +52,7 @@ Get-Content "$env:USERPROFILE\.codex\config.toml"
 临时恢复本项目 MCP 时，先让 CC Switch 完成代理接管，再使用 Codex CLI 注册。Windows 请把 Python 路径替换为本机真实的 `python.exe` 路径；不要把下面的示例路径当作固定路径：
 
 ```powershell
-$python = "C:\path\to\python.exe"
+$python = "C:\path\to\project\.venv\Scripts\python.exe"
 codex mcp add codex-agy-bridge -- $python -m codex_agy_bridge
 
 codex mcp list
@@ -149,27 +151,31 @@ Codex 写后端，agy 写前端        → agy_collab_start + agy_collab_status
 **Windows PowerShell**
 
 ```powershell
-git clone https://github.com/crazyzhang277/codex-antigravity-bridge.git
+git clone https://github.com/liuxiaofengone/codex-antigravity-bridge.git
 cd codex-antigravity-bridge
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -WhatIf
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[winpty]"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --what-if
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup
 ```
 
-`--what-if` 只打印安装和配置计划，不会写文件、修改 Codex 配置、注册 MCP 或启动 `agy`。确认环境后再运行安装脚本即可完成安装、技能复制和 MCP 注册。安装器会自动读取当前环境、Windows 系统代理和常见本地代理端口，并且只写入当前用户的 `codex-agy-bridge` MCP 配置。使用不同代理软件时，可以显式指定地址：
+`--what-if` 只打印安装和配置计划，不会写文件、修改 Codex 配置、注册 MCP 或启动 `agy`。确认环境后再运行 setup 命令即可完成技能复制和 MCP 注册。安装器会自动读取当前环境、Windows 系统代理和常见本地代理端口，并且只写入当前用户的 `codex-agy-bridge` MCP 配置。使用不同代理软件时，可以显式指定地址：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -ProxyUrl "http://127.0.0.1:7897"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --proxy-url "http://127.0.0.1:7897"
 ```
 
-不同代理软件没有统一端口。自动检测不到时，请使用 `-ProxyUrl`；项目不会假设所有用户都使用同一个端口。
+不同代理软件没有统一端口。自动检测不到时，请使用 `--proxy-url`；项目不会假设所有用户都使用同一个端口。
 
 **macOS / Linux**
 
 ```bash
-git clone https://github.com/crazyzhang277/codex-antigravity-bridge.git
+git clone https://github.com/liuxiaofengone/codex-antigravity-bridge.git
 cd codex-antigravity-bridge
-WHAT_IF=1 sh scripts/install.sh
-sh scripts/install.sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e "./mcp-antigravity-bridge"
+.venv/bin/python -m codex_agy_bridge.setup --what-if
+.venv/bin/python -m codex_agy_bridge.setup
 ```
 
 安装脚本会安装桥接器、复制 `agy-supervisor` 技能，并幂等注册 `codex-agy-bridge`。它不会安装或保存 Antigravity OAuth 凭据。
@@ -189,8 +195,8 @@ codex-agy-bridge-setup
 本地开发或从源码安装时，可以使用可编辑安装：
 
 ```powershell
-python -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
-codex-agy-bridge-setup --what-if
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --what-if
 ```
 
 `dev` 提供测试依赖，`winpty` 提供 Windows ConPTY 回退；安装包不会安装或管理 Antigravity OAuth 凭据。
@@ -365,16 +371,16 @@ Codex 会先把计划写入 `docs/agy-plans/`，创建并验证独立工作区�
 推荐使用安装器提供的幂等配置命令：
 
 ```powershell
-codex-agy-bridge-setup --what-if
-codex-agy-bridge-setup
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --what-if
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup
 codex mcp list
 ```
 
 需要显式指定代理时：
 
 ```powershell
-codex-agy-bridge-setup --proxy-url "http://127.0.0.1:7897"
-codex-agy-bridge-setup --no-proxy
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --proxy-url "http://127.0.0.1:7897"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --no-proxy
 ```
 
 该命令只管理 `codex-agy-bridge` 的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`
@@ -384,11 +390,11 @@ codex-agy-bridge-setup --no-proxy
 也可以使用 Codex CLI 手动注册：
 
 ```powershell
-$python = "C:\path\to\python.exe"
+$python = "C:\path\to\project\.venv\Scripts\python.exe"
 codex mcp add codex-agy-bridge -- $python -m codex_agy_bridge
 ```
 
-请把示例路径替换为本机真实的 Python 绝对路径。Windows 上不要把可能指向
+请把示例路径替换为本机虚拟环境中 Python 的真实绝对路径。Windows 上不要把可能指向
 Microsoft Store shim 的 `python` 命令直接写入 MCP 配置。
 
 <details>
@@ -396,9 +402,10 @@ Microsoft Store shim 的 `python` 命令直接写入 MCP 配置。
 
 ```toml
 [mcp_servers.codex-agy-bridge]
-command = "python"
+command = "C:/path/to/project/.venv/Scripts/python.exe"
 args = ["-m", "codex_agy_bridge"]
 startup_timeout_sec = 120
+tool_timeout_sec = 1200
 ```
 
 </details>

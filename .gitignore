@@ -1,4 +1,5 @@
-﻿.venv/
+# Modified by liuxiaofengone, 2026-10-08: exclude private configuration and local artifacts.
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -11,3 +12,13 @@ build/
 node_modules/
 .worktrees/
 .codegraph/
+
+# Private overrides, credentials, logs, and configuration backups.
+.env.*
+!.env.example
+*.local.toml
+*.log
+*.bak
+*.bak-*
+.codex/config.toml
+.codex/auth.json

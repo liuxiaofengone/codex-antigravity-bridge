@@ -1,5 +1,11 @@
 # Codex AGY Supervisor
 
+> Modified distribution maintained by **liuxiaofengone**, 2026-10-08.
+> Based on [crazyzhang277/codex-antigravity-bridge](https://github.com/crazyzhang277/codex-antigravity-bridge)
+> (`https://github.com/crazyzhang277/codex-antigravity-bridge.git`), retaining its Git history and Apache-2.0 license.
+> Changes isolate Git subprocess input from MCP stdio, add a regression test, and install dependencies before setup preview.
+> See the [Windows installation and delegation guide](docs/windows-setup.zh-CN.md).
+
 Codex plans and reviews. Antigravity implements bounded tasks in isolated Git worktrees.
 
 A local MCP bridge that lets Codex delegate independent coding tasks to the
@@ -39,19 +45,23 @@ Prerequisites:
 ### Source install
 
 ```powershell
-git clone https://github.com/crazyzhang277/codex-antigravity-bridge.git
+git clone https://github.com/liuxiaofengone/codex-antigravity-bridge.git
 cd codex-antigravity-bridge
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -WhatIf
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[winpty]"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --what-if
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup
 ```
 
 On macOS or Linux:
 
 ```bash
-git clone https://github.com/crazyzhang277/codex-antigravity-bridge.git
+git clone https://github.com/liuxiaofengone/codex-antigravity-bridge.git
 cd codex-antigravity-bridge
-WHAT_IF=1 sh scripts/install.sh
-sh scripts/install.sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -e "./mcp-antigravity-bridge"
+.venv/bin/python -m codex_agy_bridge.setup --what-if
+.venv/bin/python -m codex_agy_bridge.setup
 ```
 
 The setup command installs the packaged `agy-supervisor` skill, registers the
@@ -74,8 +84,8 @@ codex-agy-bridge-setup
 For a local editable install while developing the bridge:
 
 ```powershell
-python -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
-codex-agy-bridge-setup --what-if
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
+.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --what-if
 ```
 
 Complete an interactive login before the real connectivity check:
@@ -89,7 +99,7 @@ codex mcp list
 
 Use `AGY_PROXY_URL`, `PROXY_URL`, or `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`
 for a proxy. An explicit setup proxy can be passed as
-`codex-agy-bridge-setup --proxy-url http://127.0.0.1:7890`; use
+`.\.venv\Scripts\python.exe -m codex_agy_bridge.setup --proxy-url http://127.0.0.1:7890`; use
 `--no-proxy` to remove the managed proxy entries. URLs containing credentials
 are rejected so they cannot be copied into Codex configuration.
 
@@ -168,7 +178,7 @@ for a reproducible dry-run and live-demo checklist.
 ## Development
 
 ```powershell
-python -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[dev,winpty]"
 python -m pytest -q
 python scripts/validate_skill.py
 python -m compileall -q mcp-antigravity-bridge/src

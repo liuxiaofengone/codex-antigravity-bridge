@@ -1,0 +1,14 @@
+Codex AGY Supervisor - modified distribution
+
+This distribution contains codex-antigravity-bridge by crazyzhang277.
+Upstream: https://github.com/crazyzhang277/codex-antigravity-bridge
+Base commit: d01160dbe45b04f32433b4ddf9549b1608d950b5
+The upstream Apache License, Version 2.0 is retained in LICENSE.
+
+Modifications by liuxiaofengone, 2026-10-08:
+- Isolate Git subprocess standard input from the MCP stdio transport.
+- Add a real stdio collaboration dry-run regression test.
+- Document portable, isolated installation and explicit AGY delegation.
+- Update public configuration examples and exclude private local artifacts.
+
+Original attribution, licensing, and source history are retained.
