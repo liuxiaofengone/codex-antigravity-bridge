@@ -1,5 +1,7 @@
 """Small, explicit orchestration layer for parallel Codex/agy work."""
 
+# Modified by liuxiaofengone, 2026-10-08: isolate Git subprocess stdin from the MCP transport.
+
 from __future__ import annotations
 
 import math
@@ -84,6 +86,7 @@ class GitWorktreeManager:
         result = subprocess.run(
             ["git", *args],
             cwd=cwd,
+            stdin=subprocess.DEVNULL,  # Keep child processes off the MCP input pipe.
             capture_output=True,
             text=True,
             check=False,
@@ -97,6 +100,7 @@ class GitWorktreeManager:
         result = subprocess.run(
             ["git", *args],
             cwd=cwd,
+            stdin=subprocess.DEVNULL,  # Keep child processes off the MCP input pipe.
             capture_output=True,
             text=True,
             check=False,

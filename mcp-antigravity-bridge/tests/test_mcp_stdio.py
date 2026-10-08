@@ -1,9 +1,13 @@
 """Real MCP stdio smoke test; no Antigravity login is required."""
 
+# Modified by liuxiaofengone, 2026-10-08: add a real MCP collaboration dry-run regression test.
+
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -44,3 +48,55 @@ def test_mcp_stdio_server_lists_all_tools() -> None:
         "agy_collab_start",
         "agy_collab_status",
     }
+
+
+async def _collaboration_dry_run(repo: Path) -> dict:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(SOURCE)
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "codex_agy_bridge"],
+        cwd=ROOT,
+        env=env,
+    )
+    async with stdio_client(server) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await asyncio.wait_for(session.initialize(), timeout=15)
+            result = await asyncio.wait_for(
+                session.call_tool("agy_collab_start", {
+                    "project_dir": str(repo),
+                    "dry_run": True,
+                    "max_tasks": 1,
+                    "tasks": [{
+                        "id": "smoke",
+                        "prompt": "Dry-run validation only.",
+                        "owned_paths": ["README.md"],
+                        "acceptance": ["Return a plan without creating worktrees."],
+                    }],
+                }),
+                timeout=5,
+            )
+            assert not result.isError
+            return json.loads(result.content[0].text)
+
+
+def test_mcp_stdio_collaboration_dry_run_returns_without_reading_transport(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("smoke test\n", encoding="utf-8")
+    for args in (
+        ("init",),
+        ("config", "user.email", "test@example.com"),
+        ("config", "user.name", "Test User"),
+        ("add", "README.md"),
+        ("commit", "-m", "initial"),
+    ):
+        subprocess.run(["git", *args], cwd=repo, stdin=subprocess.DEVNULL,
+                       capture_output=True, check=True)
+    result = asyncio.run(_collaboration_dry_run(repo))
+    assert result["state"] == "dry-run"
+    assert result["task_count"] == 1
+    assert not Path(result["worktree_root"]).exists()
+    status = subprocess.check_output(["git", "status", "--porcelain"], cwd=repo,
+                                     stdin=subprocess.DEVNULL)
+    assert status == b""
