@@ -11,4 +11,10 @@ Modifications by liuxiaofengone, 2026-10-08:
 - Document portable, isolated installation and explicit AGY delegation.
 - Update public configuration examples and exclude private local artifacts.
 
+Modifications by liuxiaofengone, 2026-10-10:
+- Reject headless permission denial, empty responses, and incomplete CLI outcomes.
+- Preserve semantic failure kinds in asynchronous and collaboration status.
+- Decode AGY output explicitly as UTF-8 on Windows.
+- Add result-validation and real MCP regression tests and troubleshooting guidance.
+
 Original attribution, licensing, and source history are retained.

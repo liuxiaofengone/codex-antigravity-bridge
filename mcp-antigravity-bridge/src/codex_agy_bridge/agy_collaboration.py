@@ -1,6 +1,7 @@
 """Small, explicit orchestration layer for parallel Codex/agy work."""
 
 # Modified by liuxiaofengone, 2026-10-08: isolate Git subprocess stdin from the MCP transport.
+# Updated 2026-10-10: propagate semantic AGY failure kinds into collaboration status.
 
 from __future__ import annotations
 
@@ -386,7 +387,7 @@ class CollaborationRegistry:
             if record.spec.forbidden_paths:
                 task_snapshot["forbidden_paths"] = list(record.spec.forbidden_paths)
             if include_job_output:
-                for key in ("text", "error", "exit_code", "used_pty"):
+                for key in ("text", "error", "error_kind", "exit_code", "used_pty"):
                     if key in job_status:
                         task_snapshot[key] = job_status[key]
             task_snapshots.append(task_snapshot)

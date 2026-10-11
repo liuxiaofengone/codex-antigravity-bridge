@@ -95,7 +95,7 @@ agy -p "Reply exactly AGY_OK"
 
 `agy_ask` 和 `agy_ask_json` 用于同步请求；`agy_start` 和 `agy_status` 用于调用方提供独立工作区的异步任务；`agy_collab_start` 和 `agy_collab_status` 用于自动创建工作区的协作任务。
 
-`dangerously_skip_permissions` 默认关闭。`ready_for_review` 仅表示进程成功退出，仍需审查改动范围并运行验收测试。
+`dangerously_skip_permissions` 默认关闭。`ready_for_review` 表示桥接器收到了可用输出，且未检测到进程、权限或回复错误；仍需审查改动范围并运行验收测试。
 
 ## 5. 本地验证与开源文件范围
 
@@ -117,3 +117,42 @@ git diff --check
 ## 本派生版本的兼容修复
 
 原版本在 Windows MCP stdio 环境调用 Git 时可能继承 MCP 输入管道，导致协作预检无法及时返回。本版本为 `GitWorktreeManager` 的两个 Git 调用设置独立的空标准输入，并增加真实 MCP 回归测试；原有工具名称、任务范围检查和人工合并流程保持一致。
+
+
+## 后台调用的权限与输出问题
+
+### `request-review` 下只读命令被拒绝
+
+`agy -p` 使用后台模式，没有交互式审批界面。即使命令只读，只要没有匹配的许可，也可能返回 `user denied permission to run command`。AGY 的顶层 `SUCCESS` 或退出码 `0` 不能单独证明任务完成，必须检查 `denied_actions` 和实际 `response`。
+
+先获得用户对具体命令的授权，再在 `%USERPROFILE%\.gemini\antigravity-cli\settings.json` 中合并对应的 `permissions.allow` 条目。例如，只授权仓库状态和当前提交查询：
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "command(git status --short)",
+      "command(git rev-parse HEAD)",
+      "command(git status --short; git rev-parse HEAD)"
+    ]
+  }
+}
+```
+
+保留原有配置，修改前备份。全局许可会影响其他 AGY 项目；`deny` 和 `ask` 的优先级高于 `allow`。普通命令规则默认按 token 前缀匹配；Windows 无法拆分组合命令时会要求完整匹配。示例的第三条用于此类场景，内容仍然只有同样两个命令。不得扩大为所有 Git 命令。
+
+重试时可向 Codex 发送：
+
+> 请通过 agy 在当前项目仅执行 `git status --short; git rev-parse HEAD`，报告实际输出。保持 request-review，不启用权限绕过；不修改文件。若权限被拒绝、回复为空或任务未完成，请报告失败并停止。
+
+完整开发任务还需要授权相应的测试、构建等命令；上述两条规则只用于状态和提交检查。后台无法批准的操作可以改为由用户在 AGY 交互界面审批，或先授权具体命令再重试。
+
+本版本将权限拒绝报告为 `AGY_PERMISSION_DENIED`，将空回复报告为 `AGY_EMPTY_OUTPUT`；异步任务对应返回 `state=failed` 和 `error_kind`。检测到权限拒绝后不会通过 PTY 再次执行同一个请求。
+
+### 中文回复触发 `NoneType` 错误
+
+AGY 输出使用 UTF-8，而部分 Windows Python 环境默认使用 GBK。旧版本读取中文时可能先发生 `UnicodeDecodeError`，随后出现 `expected string or bytes-like object, got 'NoneType'`。
+
+本版本显式使用 UTF-8 读取 AGY 的标准输出和错误输出，异常字节采用替换处理，防止整段输出丢失。更新源码或重装包后，重启正在运行的 Codex/MCP 服务，让服务加载新代码。
+
+官方说明：[后台权限行为](https://antigravity.google/docs/cli/headless#permissions-in-headless-mode)、[CLI 权限配置](https://antigravity.google/docs/permissions?tab=cli)。

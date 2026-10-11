@@ -12,8 +12,11 @@ Reference implementations:
 - https://github.com/sshahzaiib/agy-bridge (MCP bridge, TypeScript)
 """
 
+# Modified by liuxiaofengone, 2026-10-10: validate headless outcomes and decode UTF-8 output.
+
 from __future__ import annotations
 
+import json
 import os
 import re
 import select
@@ -70,6 +73,15 @@ _NETWORK_ERROR_MARKERS = (
     "timed out",
     "timeout",
     "eof while connecting",
+)
+_PERMISSION_ERROR_MARKERS = (
+    "user denied permission",
+    "permission check failed",
+    "tool call was denied",
+    "tool call is denied",
+    "soft-denied",
+    "auto-denied",
+    "permission denied for",
 )
 _AUTH_ERROR_MARKERS = (
     "authentication required",
@@ -295,6 +307,8 @@ def resolve_agy_environment(force: bool = False) -> dict[str, str]:
 def classify_agy_error(text: str, stderr: str = "") -> str:
     """Classify an AGY failure for user-facing recovery guidance."""
     detail = f"{text}\n{stderr}".lower()
+    if any(marker in detail for marker in _PERMISSION_ERROR_MARKERS):
+        return "permission"
     if any(marker in detail for marker in _NETWORK_ERROR_MARKERS):
         return "network"
     if any(marker in detail for marker in _AUTH_ERROR_MARKERS):
@@ -302,9 +316,77 @@ def classify_agy_error(text: str, stderr: str = "") -> str:
     return "unknown"
 
 
+def _agy_envelope(text: str) -> dict | None:
+    """Recognize CLI metadata without treating arbitrary answer JSON as metadata."""
+    try:
+        payload = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("event") == "result":
+        payload = payload.get("result")
+    if not isinstance(payload, dict):
+        return None
+    status = payload.get("status", payload.get("result"))
+    if (
+        isinstance(status, str)
+        and status in {
+            "SUCCESS", "ERROR", "FAILED", "FAILURE", "CANCELLED", "CANCELED",
+            "INTERRUPTED", "TIMEOUT", "ABORTED", "INVALID", "WAITING", "RUNNING",
+        }
+        and ("conversation_id" in payload or "denied_actions" in payload)
+        and any(key in payload for key in ("response", "error", "denied_actions"))
+    ):
+        return payload
+    return None
+
+
+def agy_result_error_kind(result: AgyResult) -> str | None:
+    """Return a failure kind, including CLI soft failures that still exit zero."""
+    payload = _agy_envelope(result.text)
+    if payload and payload.get("denied_actions"):
+        return "permission"
+    if classify_agy_error("", result.stderr) == "permission":
+        return "permission"
+    if result.exit_code != 0:
+        return classify_agy_error(result.text, result.stderr)
+    if payload:
+        status = payload.get("status", payload.get("result"))
+        if status != "SUCCESS" or payload.get("error"):
+            return classify_agy_error(str(payload.get("error", "")), result.stderr)
+        response = payload.get("response")
+        if not isinstance(response, str) or not response.strip():
+            return "empty_output"
+    if not result.text.strip():
+        return "empty_output"
+    return None
+
+
 def describe_agy_failure(result: AgyResult) -> str:
     detail = result.text or result.stderr or "agy returned no diagnostic output"
-    kind = classify_agy_error(result.text, result.stderr)
+    kind = agy_result_error_kind(result) or "unknown"
+    if kind == "permission":
+        payload = _agy_envelope(result.text)
+        if result.stderr:
+            detail = result.stderr
+        elif payload:
+            detail = (
+                f"Denied actions: {json.dumps(payload.get('denied_actions'), ensure_ascii=False)}; "
+                f"conversation_id: {payload.get('conversation_id', 'unknown')}"
+            )
+        return (
+            "AGY_PERMISSION_DENIED: agy could not obtain tool approval in headless mode. "
+            "Review the requested action interactively in the same workspace, or explicitly "
+            "authorize a narrow permissions.allow rule before retrying. "
+            f"Original error: {detail}"
+        )
+    if kind == "empty_output":
+        return (
+            "AGY_EMPTY_OUTPUT: agy returned no usable response. "
+            "A zero exit code or CLI SUCCESS alone does not confirm task completion. "
+            f"Original output: {detail}"
+        )
     if kind == "network":
         return (
             "AGY_PROXY_ERROR: agy could not reach its network endpoint. "
@@ -363,7 +445,13 @@ def run_agy(
     direct = _run_subprocess(args, launch_workdir, timeout, environment)
     direct_text = clean_agy_output(direct.stdout)
     direct_stderr = clean_agy_output(direct.stderr)
-    if direct_text or direct.returncode != 0:
+    # A denied tool is not the isatty bug. Re-running it in a PTY would repeat
+    # the denied operation and cannot supply the missing user authorization.
+    if (
+        direct_text
+        or direct.returncode != 0
+        or classify_agy_error("", direct_stderr) == "permission"
+    ):
         if classify_agy_error(direct_text, direct_stderr) == "network":
             resolve_agy_environment(force=True)
         return AgyResult(
@@ -465,7 +553,16 @@ def _run_subprocess(
     timeout: float,
     env: Optional[dict[str, str]] = None,
 ) -> subprocess.CompletedProcess:
-    kwargs: dict = {"cwd": workdir, "capture_output": True, "text": True, "timeout": timeout}
+    # AGY uses UTF-8; the Windows locale may still be GBK. Explicit decoding
+    # prevents reader-thread errors that otherwise replace the capture with None.
+    kwargs: dict = {
+        "cwd": workdir,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "timeout": timeout,
+    }
     if env is not None:
         kwargs["env"] = env
     if sys.platform == "win32":

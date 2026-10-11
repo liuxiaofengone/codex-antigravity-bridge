@@ -1,6 +1,7 @@
 """Real MCP stdio smoke test; no Antigravity login is required."""
 
 # Modified by liuxiaofengone, 2026-10-08: add a real MCP collaboration dry-run regression test.
+# Updated 2026-10-10: cover soft-denied CLI results over the real MCP transport.
 
 from __future__ import annotations
 
@@ -100,3 +101,50 @@ def test_mcp_stdio_collaboration_dry_run_returns_without_reading_transport(tmp_p
     status = subprocess.check_output(["git", "status", "--porcelain"], cwd=repo,
                                      stdin=subprocess.DEVNULL)
     assert status == b""
+
+async def _permission_failure_round_trip(tmp_path: Path) -> None:
+    # Exercise the actual MCP transport with a deterministic local CLI stand-in.
+    # No real AGY login, command permission, or model request is involved.
+    payload = json.dumps({
+        "conversation_id": "test-conversation",
+        "status": "SUCCESS",
+        "response": "",
+        "denied_actions": ["RunCommand"],
+    })
+    if os.name == "nt":
+        binary = tmp_path / "agy.cmd"
+        binary.write_text("@echo off\necho " + payload + "\nexit /b 0\n", encoding="utf-8")
+    else:
+        binary = tmp_path / "agy"
+        binary.write_text("#!/bin/sh\nprintf '%s\\n' '" + payload + "'\n", encoding="utf-8")
+        binary.chmod(0o700)
+    env = dict(os.environ, AGY_PATH=str(binary), PYTHONPATH=str(SOURCE))
+    params = StdioServerParameters(command=sys.executable,
+                                  args=["-m", "codex_agy_bridge"], cwd=ROOT, env=env)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await asyncio.wait_for(session.initialize(), timeout=15)
+            for name in ("agy_ask", "agy_ask_json"):
+                result = await asyncio.wait_for(session.call_tool(name, {
+                    "prompt": "Fixture only.", "workdir": str(tmp_path), "timeout": 5,
+                }), timeout=10)
+                assert result.isError
+                assert "AGY_PERMISSION_DENIED" in result.content[0].text
+            started = await session.call_tool("agy_start", {
+                "prompt": "Fixture only.", "workdir": str(tmp_path), "timeout": 5,
+            })
+            assert not started.isError
+            job_id = started.content[0].text
+            for _ in range(100):
+                result = await session.call_tool("agy_status", {"job_id": job_id})
+                status = json.loads(result.content[0].text)
+                if status["state"] not in {"queued", "running"}:
+                    break
+                await asyncio.sleep(0.05)
+            assert status["state"] == "failed"
+            assert status["error_kind"] == "permission"
+            assert status["exit_code"] == 0
+
+
+def test_mcp_stdio_soft_permission_failure_is_error(tmp_path: Path) -> None:
+    asyncio.run(_permission_failure_round_trip(tmp_path))

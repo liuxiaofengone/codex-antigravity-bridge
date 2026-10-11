@@ -1,5 +1,7 @@
 """Asynchronous job management for parallel worktree delegation."""
 
+# Modified by liuxiaofengone, 2026-10-10: propagate permission and empty-response failures.
+
 from __future__ import annotations
 
 import atexit
@@ -10,7 +12,9 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from .agy_runner import AgyResult, classify_agy_error, describe_agy_failure, run_agy, run_agy_visible
+from .agy_runner import (
+    AgyResult, agy_result_error_kind, describe_agy_failure, run_agy, run_agy_visible,
+)
 
 
 @dataclass
@@ -99,7 +103,8 @@ class AgyJobRegistry:
         except Exception as exc:  # noqa: BLE001 - report worker failures to MCP.
             return {"job_id": job_id, "state": "failed", "error": str(exc)}
 
-        state = "completed" if result.exit_code == 0 else "failed"
+        error_kind = agy_result_error_kind(result)
+        state = "completed" if error_kind is None else "failed"
         status = {
             "job_id": job_id,
             "state": state,
@@ -108,7 +113,7 @@ class AgyJobRegistry:
             "used_pty": result.used_pty,
         }
         if state == "failed":
-            status["error_kind"] = classify_agy_error(result.text, result.stderr)
+            status["error_kind"] = error_kind
             status["error"] = describe_agy_failure(result)
         return status
 

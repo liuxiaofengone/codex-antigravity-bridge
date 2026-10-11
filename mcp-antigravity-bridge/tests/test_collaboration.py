@@ -1,3 +1,5 @@
+# Modified by liuxiaofengone, 2026-10-10: cover permission failure-kind propagation.
+
 from __future__ import annotations
 
 import subprocess
@@ -335,3 +337,22 @@ def test_status_reports_unknown_session() -> None:
         "state": "unknown",
         "error": "collaboration session not found",
     }
+
+
+def test_status_preserves_permission_failure_kind_with_zero_exit(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    jobs = FakeJobs()
+    registry = CollaborationRegistry(jobs=jobs)
+    started = registry.start(project_dir=str(repo), tasks=[{
+        "id": "readiness", "prompt": "Fixture only.", "owned_paths": ["README.md"],
+        "acceptance": ["Report the actual result."],
+    }])
+    job_id = jobs.started[0]["job_id"]
+    jobs.states[job_id] = {
+        "job_id": job_id, "state": "failed", "exit_code": 0,
+        "error_kind": "permission", "error": "AGY_PERMISSION_DENIED: RunCommand",
+    }
+    status = registry.status(started["session_id"])
+    assert status["state"] == "failed"
+    assert status["tasks"][0]["exit_code"] == 0
+    assert status["tasks"][0]["error_kind"] == "permission"
