@@ -267,6 +267,49 @@ def test_non_development_target_and_credentials_are_rejected(
             jobs=FakeJobs(),
         )
     assert path_error.value.code == "invalid_remote_context"
+    traversal = _remote_context(
+        tmp_path,
+        worktree="/workspace/../production",
+    )
+    with pytest.raises(RemoteStartError) as traversal_error:
+        agy_remote.start_remote(
+            "Run task",
+            coordinator_dir=str(tmp_path),
+            remote_context=traversal,
+            preflight_id=report["preflight_id"],
+            execution_options={
+                "mode": "accept-edits",
+                "approved_commands": ["git status --short"],
+                "authorization_ref": "user-approved-remote-1",
+            },
+            timeout=30,
+            jobs=FakeJobs(),
+        )
+    assert traversal_error.value.code == "invalid_remote_context"
+
+
+def test_remote_evidence_refs_are_required(
+    tmp_path, remote_dependencies
+) -> None:
+    context = _remote_context(tmp_path, evidence_refs=[])
+    report = _preflight_report(tmp_path, context)
+
+    assert report["state"] == "blocked"
+    with pytest.raises(RemoteStartError) as error:
+        agy_remote.start_remote(
+            "Run task",
+            coordinator_dir=str(tmp_path),
+            remote_context=context,
+            preflight_id=report["preflight_id"],
+            execution_options={
+                "mode": "accept-edits",
+                "approved_commands": ["git status --short"],
+                "authorization_ref": "user-approved-remote-1",
+            },
+            timeout=30,
+            jobs=FakeJobs(),
+        )
+    assert error.value.code == "invalid_remote_context"
 
 
 def test_unsupported_remote_lifecycle_is_blocked(

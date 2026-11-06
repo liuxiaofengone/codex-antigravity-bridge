@@ -10,7 +10,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import RLock
 from typing import Any, Mapping
 
@@ -178,6 +178,11 @@ def _remote_context_complete(context: Mapping[str, Any] | None) -> bool:
             not isinstance(item, str) or not item.strip() for item in items
         ):
             return False
+        if key == "evidence_refs" and not items:
+            return False
+    worktree = PurePosixPath(str(context["worktree"]))
+    if not worktree.is_absolute() or ".." in worktree.parts:
+        return False
     identity = context.get("identity")
     return isinstance(identity, Mapping)
 

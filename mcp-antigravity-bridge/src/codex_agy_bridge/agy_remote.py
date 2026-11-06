@@ -7,7 +7,7 @@ import json
 import math
 import re
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from .agy_capabilities import inspect_agy_capabilities
@@ -109,9 +109,10 @@ def _validate_remote_context(context: Mapping[str, Any]) -> dict[str, Any]:
                 f"remote_context.{key} must be non-empty",
                 code="invalid_remote_context",
             )
-    if not str(context["worktree"]).startswith("/"):
+    worktree = PurePosixPath(str(context["worktree"]))
+    if not worktree.is_absolute() or ".." in worktree.parts:
         raise RemoteStartError(
-            "remote_context.worktree must be a POSIX absolute path",
+            "remote_context.worktree must be a normalized POSIX absolute path",
             code="invalid_remote_context",
         )
     if not _HEX_SHA.fullmatch(str(context["baseline_sha"])):
@@ -122,6 +123,11 @@ def _validate_remote_context(context: Mapping[str, Any]) -> dict[str, Any]:
     owned = _remote_path_list(context["owned_paths"], "owned_paths")
     forbidden = _remote_path_list(context["forbidden_paths"], "forbidden_paths")
     evidence = _string_list(context["evidence_refs"], "evidence_refs")
+    if not evidence:
+        raise RemoteStartError(
+            "remote_context.evidence_refs must not be empty",
+            code="invalid_remote_context",
+        )
     return {
         **dict(context),
         "owned_paths": list(owned),

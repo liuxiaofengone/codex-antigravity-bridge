@@ -44,7 +44,7 @@
 - PowerShell 子进程、超时、运行时取消、其他 job 不受影响、持久化重启恢复、legacy 排队/运行取消边界均有真实本地 fixture 覆盖。
 - `agy_cancel` 区分 legacy 排队取消、运行中 `unsupported_running_legacy`、managed 本地进程树取消和永远 `unknown` 的远端状态。
 - `agy_remote_start` 将 Linux 远端工作树与 Windows 本地 cwd 分离，绑定 5 分钟预检、策略、调用方独立身份回读和 evidence refs；不提供远端停止/清理确认。
-- 全量本机结果：`203 passed, 1 skipped`。skip 仍是不带显式 opt-in 的模型 canary；新的 PowerShell canary 已单独真实执行并五项全部通过。
+- 全量本机结果：`204 passed, 1 skipped`。skip 仍是不带显式 opt-in 的模型 canary；新的 PowerShell canary 已单独真实执行并五项全部通过。
 - 版本升级为 `0.3.0`；未调用 CNB、SSH 或生产系统。
 
 ## 文件职责
