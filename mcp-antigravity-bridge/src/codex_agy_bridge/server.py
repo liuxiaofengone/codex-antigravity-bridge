@@ -11,6 +11,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .agy_capabilities import inspect_agy_capabilities
 from .agy_collaboration import agy_collaborations
 from .agy_jobs import agy_jobs
 from .agy_runner import AgyResult, agy_result_error_kind, describe_agy_failure, run_agy
@@ -48,6 +49,21 @@ def _validate_timeout(timeout: float) -> float:
     ):
         raise ValueError("timeout must be a positive finite number")
     return float(timeout)
+
+
+@mcp.tool()
+def agy_doctor(refresh: bool = False) -> str:
+    """Inspect the local AGY CLI without starting a model prompt.
+
+    The snapshot reports live `--version` and `--help` declarations plus a
+    redacted fingerprint of local settings. Declared features and execution
+    modes remain unknown until a separately authorized local canary verifies
+    their runtime behavior.
+    """
+    return json.dumps(
+        inspect_agy_capabilities(refresh=refresh).as_dict(),
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool()

@@ -44,6 +44,7 @@ def test_mcp_stdio_server_lists_all_tools() -> None:
     assert asyncio.run(_list_tools()) == {
         "agy_ask",
         "agy_ask_json",
+        "agy_doctor",
         "agy_start",
         "agy_status",
         "agy_collab_start",
