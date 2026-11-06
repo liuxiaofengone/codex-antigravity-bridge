@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from codex_agy_bridge import server
+from codex_agy_bridge.agy_policy import ExecutionOptions
 from codex_agy_bridge.agy_runner import AgyResult
 
 
@@ -87,3 +88,78 @@ def test_public_tools_reject_nonpositive_timeouts(tmp_path):
 
     with pytest.raises(ValueError, match="positive finite number"):
         server.agy_ask("Say hi", timeout=float("nan"))
+
+
+def test_sync_tools_forward_parsed_execution_options(monkeypatch):
+    captured = []
+
+    def fake_run_agy(*args, **kwargs):
+        captured.append(kwargs)
+        return AgyResult(text='{"ok": true}', exit_code=0)
+
+    monkeypatch.setattr(server, "run_agy", fake_run_agy)
+    raw = {
+        "mode": "accept-edits",
+        "approved_commands": ["git status --short"],
+        "authorization_ref": "user-approved-1",
+    }
+
+    server.agy_ask("Say hi", execution_options=raw)
+    server.agy_ask_json("Return JSON", execution_options=raw)
+
+    assert len(captured) == 2
+    assert all(isinstance(item["execution_options"], ExecutionOptions) for item in captured)
+
+
+def test_async_tools_forward_parsed_execution_options(tmp_path, monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        server.agy_jobs,
+        "start",
+        lambda *args, **kwargs: captured.append(kwargs) or "job-1",
+    )
+    monkeypatch.setattr(
+        server.agy_collaborations,
+        "start",
+        lambda **kwargs: captured.append(kwargs) or {"state": "dry-run"},
+    )
+    raw = {
+        "mode": "accept-edits",
+        "approved_commands": ["git status --short"],
+        "authorization_ref": "user-approved-1",
+    }
+
+    server.agy_start("Implement", workdir=str(tmp_path), execution_options=raw)
+    server.agy_collab_start(
+        project_dir=str(tmp_path),
+        tasks=[{
+            "id": "one",
+            "prompt": "Implement",
+            "owned_paths": ["README.md"],
+            "acceptance": ["pass"],
+        }],
+        execution_options=raw,
+    )
+
+    assert len(captured) == 2
+    assert all(isinstance(item["execution_options"], ExecutionOptions) for item in captured)
+
+
+def test_execution_options_conflict_with_skip_permissions_before_start(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        server.agy_jobs,
+        "start",
+        lambda *args, **kwargs: pytest.fail("job must not start"),
+    )
+    with pytest.raises(RuntimeError, match="conflict"):
+        server.agy_start(
+            "Implement",
+            workdir=str(tmp_path),
+            dangerously_skip_permissions=True,
+            execution_options={
+                "mode": "accept-edits",
+                "authorization_ref": "user-approved-1",
+            },
+        )

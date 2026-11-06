@@ -15,8 +15,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .agy_runner import find_agy
-
 _MODE_NAMES = ("accept-edits", "auto", "plan")
 _HELP_USAGE = re.compile(r"(?m)^Usage(?:\s+of\s+\S+)?:")
 _DECLARED_FLAG = re.compile(
@@ -51,6 +49,13 @@ def clear_capability_cache() -> None:
     with _CACHE_LOCK:
         _CACHE_KEY = None
         _CACHE_VALUE = None
+
+
+def find_agy() -> str | None:
+    """Resolve AGY lazily to avoid a runner/capability import cycle."""
+    from .agy_runner import find_agy as resolve_agy
+
+    return resolve_agy()
 
 
 def _run_probe(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:

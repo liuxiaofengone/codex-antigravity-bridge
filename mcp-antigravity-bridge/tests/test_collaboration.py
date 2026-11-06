@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_agy_bridge.agy_collaboration import CollaborationRegistry
+from codex_agy_bridge.agy_policy import ExecutionOptions
 
 
 class FakeJobs:
@@ -362,3 +363,27 @@ def test_status_preserves_permission_failure_kind_with_zero_exit(tmp_path: Path)
     assert status["tasks"][0]["reason"] == "permission_blocked"
     assert status["tasks"][0]["retryable"] is False
     assert status["tasks"][0]["failed_command"] == "git status --short"
+
+
+def test_collaboration_forwards_execution_options_to_each_task(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    jobs = FakeJobs()
+    registry = CollaborationRegistry(jobs=jobs)
+    options = ExecutionOptions(
+        mode="accept-edits",
+        approved_commands=("git status --short",),
+        authorization_ref="user-approved-1",
+    )
+
+    registry.start(
+        project_dir=str(repo),
+        tasks=[{
+            "id": "one",
+            "prompt": "One",
+            "owned_paths": ["README.md"],
+            "acceptance": ["pass"],
+        }],
+        execution_options=options,
+    )
+
+    assert jobs.started[0]["execution_options"] == options

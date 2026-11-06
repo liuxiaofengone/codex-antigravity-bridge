@@ -28,6 +28,12 @@ import time
 from typing import Optional
 from urllib.parse import urlsplit
 
+from .agy_capabilities import inspect_agy_capabilities
+from .agy_policy import (
+    ExecutionOptions,
+    build_session_args,
+    load_inherited_permissions,
+)
 from .agy_result import (
     AgyResult,
     agy_result_error_kind,
@@ -317,6 +323,7 @@ def run_agy(
     timeout: float = 300.0,
     output_format: Optional[str] = None,
     dangerously_skip_permissions: bool = False,
+    execution_options: ExecutionOptions | None = None,
 ) -> AgyResult:
     """Run `agy -p <prompt>` headlessly and return cleaned text output.
 
@@ -330,7 +337,25 @@ def run_agy(
             "`irm https://antigravity.google/cli/install.ps1 | iex`) or set AGY_PATH."
         )
 
-    args = [binary, "-p", prompt]
+    options = execution_options or ExecutionOptions()
+    if not isinstance(options, ExecutionOptions):
+        raise TypeError("execution_options must be an ExecutionOptions instance")
+    if not options.is_default and dangerously_skip_permissions:
+        raise ValueError(
+            "execution_options conflict with dangerously_skip_permissions"
+        )
+    capability_id: str | None = None
+    if options.is_default:
+        session_args: list[str] = []
+    else:
+        capabilities = inspect_agy_capabilities()
+        capability_id = capabilities.capability_id
+        session_args = build_session_args(
+            options,
+            capabilities,
+            load_inherited_permissions(),
+        )
+    args = [binary, "-p", prompt, *session_args]
     if output_format:
         args += ["--output-format", output_format]
     if dangerously_skip_permissions:
@@ -358,6 +383,7 @@ def run_agy(
         output_format=output_format,
         used_pty=False,
         workdir=launch_workdir,
+        capability_id=capability_id,
     )
     direct_text = direct_result.text
     direct_stderr = direct_result.stderr
@@ -396,6 +422,7 @@ def run_agy(
             output_format=output_format,
             used_pty=True,
             workdir=pty_workdir,
+            capability_id=capability_id,
         )
 
     fallback_exit_code = (
@@ -410,6 +437,7 @@ def run_agy(
         output_format=output_format,
         used_pty=True,
         workdir=pty_workdir,
+        capability_id=capability_id,
     )
     fallback_result.exit_code = fallback_exit_code
     fallback_result.text = "agy produced no output; PTY fallback was unavailable"
@@ -422,6 +450,7 @@ def run_agy_visible(
     timeout: float = 300.0,
     output_format: Optional[str] = None,
     dangerously_skip_permissions: bool = False,
+    execution_options: ExecutionOptions | None = None,
 ) -> AgyResult:
     """Run agy in a visible Windows console and wait for its exit code.
 
@@ -438,7 +467,25 @@ def run_agy_visible(
             "agy binary not found. Install it or set AGY_PATH before using terminal mode."
         )
 
-    args = [binary, "-p", prompt]
+    options = execution_options or ExecutionOptions()
+    if not isinstance(options, ExecutionOptions):
+        raise TypeError("execution_options must be an ExecutionOptions instance")
+    if not options.is_default and dangerously_skip_permissions:
+        raise ValueError(
+            "execution_options conflict with dangerously_skip_permissions"
+        )
+    capability_id: str | None = None
+    if options.is_default:
+        session_args: list[str] = []
+    else:
+        capabilities = inspect_agy_capabilities()
+        capability_id = capabilities.capability_id
+        session_args = build_session_args(
+            options,
+            capabilities,
+            load_inherited_permissions(),
+        )
+    args = [binary, "-p", prompt, *session_args]
     if output_format:
         args += ["--output-format", output_format]
     if dangerously_skip_permissions:
@@ -464,6 +511,7 @@ def run_agy_visible(
     return AgyResult(
         text="Live agy output was shown in a separate terminal window.",
         exit_code=exit_code,
+        capability_id=capability_id,
     )
 
 

@@ -12,6 +12,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
+from .agy_policy import ExecutionOptions
 from .agy_runner import (
     AgyResult,
     agy_result_error_kind,
@@ -68,6 +69,7 @@ class AgyJobRegistry:
         output_format: str | None = None,
         dangerously_skip_permissions: bool = False,
         display_mode: str = "headless",
+        execution_options: ExecutionOptions | None = None,
     ) -> str:
         if display_mode not in {"headless", "terminal"}:
             raise ValueError("display_mode must be 'headless' or 'terminal'")
@@ -80,10 +82,11 @@ class AgyJobRegistry:
             future = self._executor.submit(
                 runner,
                 prompt,
-                workdir,
-                timeout,
-                output_format,
-                dangerously_skip_permissions,
+                workdir=workdir,
+                timeout=timeout,
+                output_format=output_format,
+                dangerously_skip_permissions=dangerously_skip_permissions,
+                execution_options=execution_options,
             )
             self._jobs[job_id] = _JobRecord(future=future)
             future.add_done_callback(lambda _future: self._mark_completed(job_id))

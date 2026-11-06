@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
 from .agy_jobs import AgyJobRegistry, agy_jobs
+from .agy_policy import ExecutionOptions
 
 
 _TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -218,6 +219,7 @@ class CollaborationRegistry:
         display_mode: str = "headless",
         max_tasks: int = _MAX_TASKS,
         dry_run: bool = False,
+        execution_options: ExecutionOptions | None = None,
     ) -> dict[str, Any]:
         if not tasks:
             raise ValueError("tasks must contain at least one task")
@@ -330,6 +332,7 @@ class CollaborationRegistry:
                     timeout=timeout,
                     dangerously_skip_permissions=dangerously_skip_permissions,
                     display_mode=display_mode,
+                    execution_options=execution_options,
                 )
         except Exception as exc:  # noqa: BLE001 - preserve the session for inspection.
             raise RuntimeError(

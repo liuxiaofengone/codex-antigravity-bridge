@@ -13,7 +13,9 @@ from mcp.server.fastmcp import FastMCP
 
 from .agy_capabilities import inspect_agy_capabilities
 from .agy_collaboration import agy_collaborations
+from .agy_evidence import PolicyEvidenceError, load_policy_evidence
 from .agy_jobs import agy_jobs
+from .agy_policy import parse_execution_options, probe_agy_policy
 from .agy_runner import AgyResult, agy_result_error_kind, describe_agy_failure, run_agy
 
 mcp = FastMCP(
@@ -60,8 +62,26 @@ def agy_doctor(refresh: bool = False) -> str:
     modes remain unknown until a separately authorized local canary verifies
     their runtime behavior.
     """
+    payload = inspect_agy_capabilities(refresh=refresh).as_dict()
+    try:
+        payload["policy_evidence"] = load_policy_evidence().as_dict()
+    except PolicyEvidenceError:
+        payload["policy_evidence"] = {"state": "policy_unverified"}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+@mcp.tool()
+def agy_policy_probe(authorization_ref: str, timeout: float = 60.0) -> str:
+    """Run an explicitly authorized local canary for session-settings safety.
+
+    This submits bounded AGY calls against a temporary local Git repository.
+    It never contacts CNB or SSH and does not modify global permission files.
+    """
     return json.dumps(
-        inspect_agy_capabilities(refresh=refresh).as_dict(),
+        probe_agy_policy(
+            authorization_ref,
+            timeout=_validate_timeout(timeout),
+        ),
         ensure_ascii=False,
     )
 
@@ -72,6 +92,7 @@ def agy_ask(
     workdir: str = "",
     timeout: float = 300.0,
     dangerously_skip_permissions: bool = False,
+    execution_options: dict[str, Any] | None = None,
 ) -> str:
     """Ask the Google Antigravity agent headlessly and return its text answer.
 
@@ -81,11 +102,16 @@ def agy_ask(
         timeout: Hard wall-clock timeout in seconds.
         dangerously_skip_permissions: Allow agy tools without interactive prompts.
     """
+    options = parse_execution_options(
+        execution_options,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+    )
     result = run_agy(
         prompt,
         workdir=workdir or None,
         timeout=_validate_timeout(timeout),
         dangerously_skip_permissions=dangerously_skip_permissions,
+        execution_options=options,
     )
     return _require_success(result).text
 
@@ -96,17 +122,23 @@ def agy_ask_json(
     workdir: str = "",
     timeout: float = 300.0,
     dangerously_skip_permissions: bool = False,
+    execution_options: dict[str, Any] | None = None,
 ) -> str:
     """Ask the Google Antigravity agent and return structured JSON.
 
     Uses `agy -p <prompt> --output-format json`.
     """
+    options = parse_execution_options(
+        execution_options,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+    )
     result = run_agy(
         prompt,
         workdir=workdir or None,
         timeout=_validate_timeout(timeout),
         output_format="json",
         dangerously_skip_permissions=dangerously_skip_permissions,
+        execution_options=options,
     )
     _require_success(result)
     try:
@@ -122,6 +154,7 @@ def agy_start(
     workdir: str = "",
     timeout: float = 300.0,
     dangerously_skip_permissions: bool = False,
+    execution_options: dict[str, Any] | None = None,
 ) -> str:
     """Start an asynchronous agy task and return its job id.
 
@@ -130,6 +163,10 @@ def agy_start(
     create one. Poll the returned id with ``agy_status`` while Codex continues
     work elsewhere.
     """
+    options = parse_execution_options(
+        execution_options,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+    )
     if not workdir.strip():
         raise ValueError(
             "agy_start requires an explicit workdir for a caller-created isolated worktree"
@@ -142,6 +179,7 @@ def agy_start(
         workdir=workdir or None,
         timeout=_validate_timeout(timeout),
         dangerously_skip_permissions=dangerously_skip_permissions,
+        execution_options=options,
     )
 
 
@@ -163,6 +201,7 @@ def agy_collab_start(
     display_mode: str = "headless",
     max_tasks: int = 4,
     dry_run: bool = False,
+    execution_options: dict[str, Any] | None = None,
 ) -> str:
     """Start an explicit multi-task collaboration session.
 
@@ -172,6 +211,10 @@ def agy_collab_start(
     task. ``max_tasks`` defaults to four and is a hard upper bound for this
     session. The result is ready for manual review; this tool never merges.
     """
+    options = parse_execution_options(
+        execution_options,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+    )
     result = agy_collaborations.start(
         project_dir=project_dir,
         tasks=tasks,
@@ -183,6 +226,7 @@ def agy_collab_start(
         display_mode=display_mode,
         max_tasks=max_tasks,
         dry_run=dry_run,
+        execution_options=options,
     )
     return json.dumps(result, ensure_ascii=False)
 

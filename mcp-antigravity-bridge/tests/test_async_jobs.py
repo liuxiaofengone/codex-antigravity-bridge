@@ -5,6 +5,7 @@ import time
 import pytest
 
 from codex_agy_bridge.agy_jobs import AgyJobRegistry
+from codex_agy_bridge.agy_policy import ExecutionOptions
 from codex_agy_bridge.agy_runner import AgyResult
 
 
@@ -149,5 +150,30 @@ def test_terminal_display_selects_visible_runner(monkeypatch):
             time.sleep(0.01)
         assert status["text"] == "shown"
         assert calls
+    finally:
+        registry.close()
+
+
+def test_registry_forwards_execution_options(monkeypatch):
+    captured = {}
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return AgyResult(text="DONE", exit_code=0)
+
+    monkeypatch.setattr("codex_agy_bridge.agy_jobs.run_agy", fake_run)
+    options = ExecutionOptions(
+        mode="accept-edits",
+        approved_commands=("git status --short",),
+        authorization_ref="user-approved-1",
+    )
+    registry = AgyJobRegistry()
+    try:
+        job_id = registry.start("Implement", execution_options=options)
+        for _ in range(20):
+            if registry.status(job_id)["state"] == "completed":
+                break
+            time.sleep(0.01)
+        assert captured["execution_options"] == options
     finally:
         registry.close()

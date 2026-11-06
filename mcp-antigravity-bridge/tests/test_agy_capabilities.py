@@ -224,3 +224,33 @@ def test_doctor_never_starts_a_prompt(tmp_path: Path, monkeypatch) -> None:
     assert payload["cli_version"] == "1.5.1"
     assert payload["declared_flags"]["--settings"] is True
     assert all("-p" not in args and "--print" not in args for args in calls)
+
+
+def test_doctor_reads_policy_evidence_without_running_a_probe(monkeypatch) -> None:
+    snapshot = agy_capabilities.CapabilitySnapshot(
+        capability_id="cap-1",
+        binary_path="C:\\agy.exe",
+        cli_version="1.5.1",
+        python_platform="Windows-ARM64-Python 3.14.10",
+        declared_flags={"--settings": True},
+        mode_availability={"accept-edits": "unknown"},
+        settings_summary={"digest": "digest-1"},
+    )
+    evidence = SimpleNamespace(
+        as_dict=lambda: {
+            "evidence_id": "evidence-1",
+            "checks": {"approved_command_executed": True},
+            "expires_at": "2026-11-07T00:00:00+00:00",
+        }
+    )
+    monkeypatch.setattr(server, "inspect_agy_capabilities", lambda refresh=False: snapshot)
+    monkeypatch.setattr(server, "load_policy_evidence", lambda: evidence)
+    monkeypatch.setattr(
+        server,
+        "probe_agy_policy",
+        lambda *args, **kwargs: pytest.fail("doctor must not start a canary"),
+    )
+
+    payload = json.loads(server.agy_doctor(refresh=False))
+
+    assert payload["policy_evidence"]["evidence_id"] == "evidence-1"
