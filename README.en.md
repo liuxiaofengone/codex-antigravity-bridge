@@ -155,12 +155,23 @@ means only that the process exited successfully; it is not acceptance proof.
 
 | Tool | Purpose |
 | --- | --- |
+| `agy_doctor` | Read-only live CLI capability, architecture, settings digest, and policy evidence snapshot |
+| `agy_policy_probe` | Explicit local canary for session-settings isolation, deny precedence, and global-file stability |
+| `agy_preflight` | Five-minute task-contract validation; static mode is side-effect-free and active mode submits at most one request |
 | `agy_ask` | One bounded synchronous CLI task |
 | `agy_ask_json` | One task with validated JSON output |
 | `agy_start` | Async work in a caller-created isolated worktree |
 | `agy_status` | Poll an async job |
 | `agy_collab_start` | Validate a contract and start up to four isolated tasks |
 | `agy_collab_status` | Aggregate task results and changed-file scope audits |
+
+The original execution tools accept optional `execution_options` while their
+default argv remains unchanged. Non-empty options require exact
+`approved_commands` plus an `authorization_ref` and conflict with
+`dangerously_skip_permissions=true`. Policy probing requires
+`AGY_POLICY_PROBE_OPT_IN=1`; active preflight additionally requires
+`AGY_PREFLIGHT_PROBE_OPT_IN=1`. Model self-report is not runtime evidence, and a
+hard tool-interception contract returns `unsupported_enforcement`.
 
 ## Security and limits
 

@@ -16,11 +16,13 @@ involvement or explicitly opts into Supervisor mode.
 Use this sequence:
 
 1. Inspect the repository and requested scope.
-2. Define the workdir, risk class, authorization, and exclusive file ownership.
-3. Build the required delegation prompt and choose the permission mode.
-4. Call `agy_ask`, `agy_ask_json`, `agy_start`, or the collaboration MVP.
-5. Inspect status, diff, worktree boundaries, output, and tests.
-6. Accept only a verified success; otherwise make at most two evidence-based
+2. Call `agy_doctor` and compare the live CLI capability with the task.
+3. Define the workdir, risk class, authorization, and exclusive file ownership.
+4. Build a task contract and call `agy_preflight`.
+5. Build the required delegation prompt and choose the permission mode.
+6. Call `agy_ask`, `agy_ask_json`, `agy_start`, or the collaboration MVP.
+7. Inspect status, diff, worktree boundaries, output, and tests.
+8. Accept only a verified success; otherwise make at most two evidence-based
    corrective calls, then stop with the exact blocker.
 
 Every delegation prompt must include task scope, owned files, forbidden files,
@@ -38,6 +40,20 @@ after delegation. The bridge does not create worktrees for `agy_start`.
 - Apply the same scope and permission contract to `agy_ask`, `agy_ask_json`,
   `agy_start`, and `agy_collab_start`; `agy_ask_json` additionally requires parseable JSON matching the
   requested output schema.
+- `agy_doctor` is side-effect-free. It runs only `agy --version` and
+  `agy --help`, and declared flags are not runtime permission proof.
+- Use `agy_policy_probe` only after exact authorization and
+  `AGY_POLICY_PROBE_OPT_IN=1`. Passing evidence is local, private, scoped to the
+  current CLI/settings fingerprint, and expires after 24 hours.
+- Non-default `execution_options` require `authorization_ref`; commands are
+  rendered as exact `command(<command>)` selectors. Do not broaden a task into
+  `command(git)`, `command(ssh)`, `command(cnb)`, or a wildcard.
+- Run `agy_preflight` before implementation. Static preflight never invokes the
+  model. An active probe requires `AGY_PREFLIGHT_PROBE_OPT_IN=1`, submits at most
+  one bounded request, and accepts only CLI tool events as ready evidence.
+- A five-minute preflight report binds task, capability, and policy digests. It
+  is not an execution lock; reread worktree, branch, and baseline identity
+  before changing files.
 - `agy_start` requires an existing caller-created isolated worktree as `workdir`;
   an empty or non-directory workdir is rejected.
 - `dangerously_skip_permissions=false` is the default. Enable it only after

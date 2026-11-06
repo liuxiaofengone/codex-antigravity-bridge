@@ -21,6 +21,46 @@ successful empty answer.
 Corrections preserve the same scope, worktree, permission mode, and file
 boundary, and count against the three-call limit.
 
+## Capability, Policy, and Preflight Gate
+
+Use this gate before implementation:
+
+1. Call `agy_doctor` and record `capability_id`, CLI version, Python platform,
+   declared flags, mode availability, settings digest, and any policy evidence.
+   Parameter presence is not runtime availability.
+2. If the task needs commands beyond the existing inherited permissions, obtain
+   an authorization reference from the user. Do not reinterpret approval for a
+   task as approval for unrelated commands.
+3. Run `agy_policy_probe` only with `AGY_POLICY_PROBE_OPT_IN=1`. It submits
+   three bounded local fixture calls and records isolated evidence only when it
+   independently observes an approved command, an unapproved command block,
+   deny precedence, unchanged global settings, and session isolation. Evidence
+   is private, expires after 24 hours, and remains `policy_unverified` when any
+   check is missing.
+4. Build a `TaskContract` with task id, capability id, local or `remote_ssh`
+   target, coordinator/local directory, mode, exact approved and preflight
+   commands, authorization reference, owned/forbidden paths, and remote context
+   where applicable. Run `agy_preflight`.
+5. Static preflight may return only `ready_for_probe`, `blocked`, or `unknown`
+   and never submits a model prompt. An active probe additionally requires
+   `AGY_PREFLIGHT_PROBE_OPT_IN=1`, submits only one bounded request, and converts
+   a permission denial to `blocked`.
+6. Accept `ready` only from verified CLI stream events. Model prose, an intention
+   to run a command, empty output, or mismatched command metadata is `unknown`.
+   A contract that requires bridge-enforced hard tool interception returns
+   `unsupported_enforcement`.
+7. Preflight reports expire after five minutes and bind contract, capability,
+   and policy digests. Recompute them before starting the task. For remote
+   targets, independently reread workspace id, repository, worktree, branch,
+   baseline SHA, and Git status; the report does not perform that identity read.
+
+Task-scoped `execution_options` use `mode`, exact `approved_commands`, and
+`authorization_ref`. The bridge inherits existing allow/deny/ask rules and uses
+inline `--settings`; it never edits global settings and rejects any conflict with
+`dangerously_skip_permissions=true`. CLI or settings fingerprint changes,
+expired evidence, mode or selector shape changes, missing checks, and corrupt
+evidence all produce `policy_unverified`.
+
 ## Task Risk and Permission Matrix
 
 The permission flag defaults to false for every task class.

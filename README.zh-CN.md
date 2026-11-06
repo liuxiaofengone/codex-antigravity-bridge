@@ -130,7 +130,7 @@ Codex 写后端，agy 写前端        → agy_collab_start + agy_collab_status
 <td width="25%"><strong>原生接入</strong><br><sub>注册为 MCP 服务器，Codex 桌面版和命令行都能直接调用。</sub></td>
 <td width="25%"><strong>命令行优先</strong><br><sub>复用 `agy` 自己的登录、工作区和权限流程。</sub></td>
 <td width="25%"><strong>Windows 友好</strong><br><sub>支持中文路径，并在空输出时尝试 ConPTY 回退。</sub></td>
-<td width="25%"><strong>小而清楚</strong><br><sub>本地 stdio、六个工具，没有网页服务器和数据库。</sub></td>
+<td width="25%"><strong>小而清楚</strong><br><sub>本地 stdio、九个工具，没有网页服务器和数据库。</sub></td>
 </tr>
 </table>
 
@@ -234,10 +234,13 @@ Windows 手动配置 MCP 时，请把 `command` 写成真实 Python 可执行文
 
 <a id="tools"></a>
 
-## 🧰 六个工具
+## 🧰 九个工具：六个执行工具 + 三个诊断预检
 
 | 工具 | 作用 | 返回 |
 | --- | --- | --- |
+| `agy_doctor` | 只读检查本机 CLI 版本、参数、Python 架构、设置摘要和已有策略证据 | 能力快照 JSON |
+| `agy_policy_probe` | 经显式授权运行三次本地 canary，验证任务级 `--settings` 的隔离、deny 优先级和全局文件不变 | 24 小时私有证据 JSON |
+| `agy_preflight` | 校验任务合同、5 分钟摘要绑定；静态模式不调用 AGY，主动模式最多提交一次 | 预检报告 JSON |
 | `agy_ask` | 同步执行一次受控 CLI 任务 | 清理后的文本 |
 | `agy_ask_json` | 请求结构化 CLI 输出，并拒绝非法 JSON | JSON 输出文本 |
 | `agy_start` | 在调用方提供的独立 worktree 中异步启动任务 | `job_id` |
@@ -246,6 +249,14 @@ Windows 手动配置 MCP 时，请把 `command` 写成真实 Python 可执行文
 | `agy_collab_status` | 汇总任务、工作区和差异状态 | 协同会话 JSON |
 
 所有公开任务工具都会在启动进程或 job 前拒绝非正数和非有限的 `timeout`。普通工具默认超时为 `300.0` 秒，`agy_collab_start` 默认超时为 `900.0` 秒。
+
+四个旧执行工具均新增可选 `execution_options`，但省略时仍保持原有调用与
+argv。非空选项必须包含精确的 `approved_commands` 和
+`authorization_ref`，不能与 `dangerously_skip_permissions=true` 组合。
+`agy_policy_probe` 需要 `AGY_POLICY_PROBE_OPT_IN=1`；
+`agy_preflight(active_probe=true)` 还需要
+`AGY_PREFLIGHT_PROBE_OPT_IN=1`。参数存在或模型自报都不算运行验证，
+`unsupported_enforcement` 表示桥当前不能提供硬性工具拦截。
 
 ## 🤝 协同开发模式 MVP
 

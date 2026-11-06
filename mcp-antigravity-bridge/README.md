@@ -29,14 +29,19 @@ credentials are rejected.
 
 ## MCP tools
 
-The server exposes six tools:
+The server preserves the six execution tools and adds three diagnostic/preflight tools:
 
+- `agy_doctor`, `agy_policy_probe`, and `agy_preflight` for live capability,
+  task-policy evidence, and contract checks;
 - `agy_ask` and `agy_ask_json` for bounded synchronous calls;
 - `agy_start` and `agy_status` for a caller-created isolated worktree;
 - `agy_collab_start` and `agy_collab_status` for validated multi-worktree collaboration.
 
 `dangerously_skip_permissions` defaults to `false`. Collaboration should start
 with `dry_run=true`; the bridge never auto-merges branches or deletes worktrees.
+Non-default `execution_options` require a task-local authorization reference
+and passing local canary evidence. Static preflight never invokes AGY; active
+preflight requires `AGY_PREFLIGHT_PROBE_OPT_IN=1`.
 
 ## Development checks
 

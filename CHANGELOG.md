@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Added side-effect-free `agy_doctor` capability discovery for the live AGY CLI and relevant settings.
+- Added task-scoped `execution_options`, exact-command session rules, private 24-hour policy evidence, and `agy_policy_probe`.
+- Preserved structured permission, conversation, failed-command, retryability, and redacted JSON failure details across sync, async, and collaboration results.
+- Added `agy_preflight` task contracts with five-minute bindings, static checks, explicit active probes, and strict separation of CLI tool evidence from model self-report.
+
 ## Unreleased
 
 - Consolidated user documentation around the root READMEs, docs index, and demo.

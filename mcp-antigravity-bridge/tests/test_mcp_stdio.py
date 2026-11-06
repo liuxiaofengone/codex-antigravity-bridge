@@ -49,6 +49,7 @@ def test_mcp_stdio_server_lists_all_tools() -> None:
         "agy_status",
         "agy_collab_start",
         "agy_collab_status",
+        "agy_preflight",
         "agy_policy_probe",
     }
 

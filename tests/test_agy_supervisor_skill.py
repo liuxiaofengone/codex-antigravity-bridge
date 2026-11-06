@@ -169,7 +169,15 @@ def test_skill_covers_all_bridge_tools_and_json_contract() -> None:
     protocol = PROTOCOL.read_text(encoding="utf-8")
     combined = f"{skill}\n{protocol}"
 
-    for tool in ("agy_ask", "agy_ask_json", "agy_start", "agy_status"):
+    for tool in (
+        "agy_doctor",
+        "agy_policy_probe",
+        "agy_preflight",
+        "agy_ask",
+        "agy_ask_json",
+        "agy_start",
+        "agy_status",
+    ):
         assert tool in combined
     assert "parseable JSON" in combined
     assert "requested output schema" in combined

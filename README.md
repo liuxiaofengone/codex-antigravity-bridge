@@ -155,12 +155,20 @@ means only that the process exited successfully; it is not acceptance proof.
 
 | Tool | Purpose |
 | --- | --- |
+| `agy_doctor` | Read-only live CLI capability, architecture, settings digest, and policy evidence snapshot |
+| `agy_policy_probe` | Explicit local canary for session-settings isolation and global-file stability |
+| `agy_preflight` | Five-minute task-contract validation with side-effect-free and explicit active modes |
 | `agy_ask` | One bounded synchronous CLI task |
 | `agy_ask_json` | One task with validated JSON output |
 | `agy_start` | Async work in a caller-created isolated worktree |
 | `agy_status` | Poll an async job |
 | `agy_collab_start` | Validate a contract and start up to four isolated tasks |
 | `agy_collab_status` | Aggregate task results and changed-file scope audits |
+
+The six execution tool names and default behavior remain stable. Optional
+`execution_options` add exact task-scoped commands only after private local
+canary evidence exists. Active policy or preflight probes require their explicit
+environment opt-ins, and model prose is never accepted as tool-execution proof.
 
 ## Security and limits
 

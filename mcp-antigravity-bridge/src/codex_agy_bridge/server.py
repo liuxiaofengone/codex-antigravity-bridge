@@ -16,6 +16,7 @@ from .agy_collaboration import agy_collaborations
 from .agy_evidence import PolicyEvidenceError, load_policy_evidence
 from .agy_jobs import agy_jobs
 from .agy_policy import parse_execution_options, probe_agy_policy
+from .agy_preflight import preflight
 from .agy_runner import AgyResult, agy_result_error_kind, describe_agy_failure, run_agy
 
 mcp = FastMCP(
@@ -82,6 +83,23 @@ def agy_policy_probe(authorization_ref: str, timeout: float = 60.0) -> str:
             authorization_ref,
             timeout=_validate_timeout(timeout),
         ),
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool()
+def agy_preflight(
+    contract: dict[str, Any],
+    active_probe: bool = False,
+) -> str:
+    """Validate a bounded AGY task contract without implicit model calls.
+
+    Static preflight only inspects local CLI/settings metadata. Set
+    ``active_probe=true`` and the explicit environment opt-in to submit one
+    bounded preflight prompt. A model's self-report never becomes ready evidence.
+    """
+    return json.dumps(
+        preflight(contract, active_probe=active_probe),
         ensure_ascii=False,
     )
 

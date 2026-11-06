@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -67,6 +68,9 @@ def test_readme_documents_install_and_supervision() -> None:
     for phrase in (
         "https://github.com/crazyzhang277/codex-antigravity-bridge.git",
         "agy_ask",
+        "agy_doctor",
+        "agy_policy_probe",
+        "agy_preflight",
         "agy_start",
         "agy_status",
         "agy_collab_start",
@@ -77,6 +81,43 @@ def test_readme_documents_install_and_supervision() -> None:
         "SECURITY.md",
     ):
         assert phrase in readme
+
+
+def test_first_batch_version_is_consistent() -> None:
+    project = tomllib.loads(
+        (ROOT / "mcp-antigravity-bridge" / "pyproject.toml").read_text(
+            encoding="utf-8"
+        )
+    )
+    init_source = (
+        ROOT
+        / "mcp-antigravity-bridge"
+        / "src"
+        / "codex_agy_bridge"
+        / "__init__.py"
+    ).read_text(encoding="utf-8")
+
+    assert project["project"]["version"] == "0.2.0"
+    assert '__version__ = "0.2.0"' in init_source
+
+
+def test_packaged_supervisor_resources_match_sources() -> None:
+    source = ROOT / "skills" / "agy-supervisor"
+    packaged = (
+        ROOT
+        / "mcp-antigravity-bridge"
+        / "src"
+        / "codex_agy_bridge"
+        / "resources"
+        / "agy-supervisor"
+    )
+    for relative in (
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/agy-supervisor-protocol.md",
+        "references/agy-development-plan.md",
+    ):
+        assert (source / relative).read_bytes() == (packaged / relative).read_bytes()
 
 
 def test_readmes_document_all_runtime_modes() -> None:
