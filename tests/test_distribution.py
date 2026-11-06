@@ -71,6 +71,8 @@ def test_readme_documents_install_and_supervision() -> None:
         "agy_doctor",
         "agy_policy_probe",
         "agy_preflight",
+        "agy_cancel",
+        "agy_remote_start",
         "agy_start",
         "agy_status",
         "agy_collab_start",
@@ -83,7 +85,7 @@ def test_readme_documents_install_and_supervision() -> None:
         assert phrase in readme
 
 
-def test_first_batch_version_is_consistent() -> None:
+def test_runtime_version_is_consistent() -> None:
     project = tomllib.loads(
         (ROOT / "mcp-antigravity-bridge" / "pyproject.toml").read_text(
             encoding="utf-8"
@@ -97,8 +99,8 @@ def test_first_batch_version_is_consistent() -> None:
         / "__init__.py"
     ).read_text(encoding="utf-8")
 
-    assert project["project"]["version"] == "0.2.0"
-    assert '__version__ = "0.2.0"' in init_source
+    assert project["project"]["version"] == "0.3.0"
+    assert '__version__ = "0.3.0"' in init_source
 
 
 def test_packaged_supervisor_resources_match_sources() -> None:

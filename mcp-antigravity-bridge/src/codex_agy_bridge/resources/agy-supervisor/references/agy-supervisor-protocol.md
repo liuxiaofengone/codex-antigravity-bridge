@@ -61,6 +61,77 @@ inline `--settings`; it never edits global settings and rejects any conflict wit
 expired evidence, mode or selector shape changes, missing checks, and corrupt
 evidence all produce `policy_unverified`.
 
+## Managed Local Jobs and Remote Contracts
+
+Legacy is the default for `agy_start` and `agy_collab_start`. Use explicit
+`process_control="managed"` for cancellable headless jobs. Managed execution:
+
+- launches one local AGY process with `stream-json`;
+- reads stdout and stderr concurrently;
+- does not retry empty output through a PTY;
+- owns only its process handle and process tree;
+- persists redacted job metadata but never the full prompt or raw logs.
+
+On Windows, the bridge first attempts a kill-on-close Job Object. If the host
+already places the process in a job that blocks nested assignment, cancellation
+may fall back to enumerating only descendants of the owned PID. Never terminate
+by executable name. Report `job_object_assigned`, `termination_confirmed`, and
+`local_termination`; leave `remote_termination=unknown`. POSIX uses a newly
+created process group rather than a global process-name scan.
+
+`agy_cancel` has two scopes:
+
+- legacy queued: cancel only when `Future.cancel` returns true;
+- legacy running: return `unsupported_running_legacy`, never guess a PID;
+- managed local: signal and wait for the owned process tree, with bounded
+  `wait_timeout`;
+- any remote job: local cancellation does not confirm remote termination.
+
+A bridge restart recovers identifiers and final known metadata. A formerly
+running job becomes `unknown`; no old PID is treated as alive and no task is
+automatically restarted.
+
+`agy_remote_start` is a local-coordinator contract for CNB/SSH development. It
+requires a current remote preflight plus this context:
+
+```text
+workspace_id
+repository
+ssh_alias
+worktree (POSIX absolute)
+branch
+baseline_sha
+target_kind=development
+owned_paths
+forbidden_paths
+evidence_refs
+identity.source=caller_verified
+identity.observed_at (within five minutes)
+```
+
+The identity fields must equal the declared workspace, repository, worktree,
+branch, and baseline SHA. Credentials and identity keys are forbidden. The
+bridge rechecks report TTL, capability and policy digests, execution options,
+and identity immediately before creating the local job.
+
+Use `coordinator_dir` as the local AGY cwd. Never pass the remote Linux worktree
+to a Windows process, and never translate `--remote-agent` into CNB SSH
+support. Report three layers independently:
+
+| Layer | Required interpretation |
+| --- | --- |
+| `local_job_status` | State of the bridge-owned local process only |
+| `remote_termination` | Always `unknown` in this batch |
+| `business_acceptance` | Remains `not_started` until diff/tests/business checks pass |
+
+If the caller requires automatic remote stop, cleanup, or termination
+confirmation, return `unsupported_remote_lifecycle`. Real CNB validation needs
+a resumed business task, approved commands, and independently read workspace
+identity.
+
+On Windows, use PowerShell for bridge-owned fixtures and `.ps1` AGY shims. Never
+select `cmd.exe`.
+
 ## Task Risk and Permission Matrix
 
 The permission flag defaults to false for every task class.

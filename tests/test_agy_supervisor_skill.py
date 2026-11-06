@@ -173,6 +173,8 @@ def test_skill_covers_all_bridge_tools_and_json_contract() -> None:
         "agy_doctor",
         "agy_policy_probe",
         "agy_preflight",
+        "agy_cancel",
+        "agy_remote_start",
         "agy_ask",
         "agy_ask_json",
         "agy_start",

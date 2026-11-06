@@ -220,6 +220,7 @@ class CollaborationRegistry:
         max_tasks: int = _MAX_TASKS,
         dry_run: bool = False,
         execution_options: ExecutionOptions | None = None,
+        process_control: str = "legacy",
     ) -> dict[str, Any]:
         if not tasks:
             raise ValueError("tasks must contain at least one task")
@@ -238,6 +239,10 @@ class CollaborationRegistry:
             raise ValueError("display_mode must be 'headless' or 'terminal'")
         if display_mode == "terminal" and sys.platform != "win32":
             raise ValueError("display_mode='terminal' is currently supported on Windows only")
+        if process_control not in {"legacy", "managed"}:
+            raise ValueError("process_control must be 'legacy' or 'managed'")
+        if display_mode == "terminal" and process_control == "managed":
+            raise ValueError("managed process_control only supports headless mode")
         if isinstance(max_tasks, bool) or not isinstance(max_tasks, int):
             raise ValueError("max_tasks must be an integer between 1 and 4")
         if not 1 <= max_tasks <= _MAX_TASKS:
@@ -333,6 +338,7 @@ class CollaborationRegistry:
                     dangerously_skip_permissions=dangerously_skip_permissions,
                     display_mode=display_mode,
                     execution_options=execution_options,
+                    process_control=process_control,
                 )
         except Exception as exc:  # noqa: BLE001 - preserve the session for inspection.
             raise RuntimeError(

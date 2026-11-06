@@ -17,6 +17,7 @@ from .agy_evidence import PolicyEvidenceError, load_policy_evidence
 from .agy_jobs import agy_jobs
 from .agy_policy import parse_execution_options, probe_agy_policy
 from .agy_preflight import preflight
+from .agy_remote import start_remote
 from .agy_runner import AgyResult, agy_result_error_kind, describe_agy_failure, run_agy
 
 mcp = FastMCP(
@@ -33,6 +34,9 @@ mcp = FastMCP(
         "Use agy_doctor for side-effect-free capability discovery, "
         "agy_policy_probe for explicitly authorized task-settings evidence, "
         "and agy_preflight before delegation; static preflight never starts AGY. "
+        "Use process_control='managed' plus agy_cancel for local cancellable jobs. "
+        "Use agy_remote_start only with a verified CNB/SSH development context; "
+        "it keeps remote termination unknown. "
         "Only pass dangerously_skip_permissions=true after the user explicitly "
         "authorizes that exact trusted worktree and task."
     ),
@@ -176,6 +180,8 @@ def agy_start(
     timeout: float = 300.0,
     dangerously_skip_permissions: bool = False,
     execution_options: dict[str, Any] | None = None,
+    display_mode: str = "headless",
+    process_control: str = "legacy",
 ) -> str:
     """Start an asynchronous agy task and return its job id.
 
@@ -201,6 +207,8 @@ def agy_start(
         timeout=_validate_timeout(timeout),
         dangerously_skip_permissions=dangerously_skip_permissions,
         execution_options=options,
+        display_mode=display_mode,
+        process_control=process_control,
     )
 
 
@@ -208,6 +216,47 @@ def agy_start(
 def agy_status(job_id: str) -> str:
     """Return JSON status for an asynchronous agy task."""
     return json.dumps(agy_jobs.status(job_id), ensure_ascii=False)
+
+
+@mcp.tool()
+def agy_cancel(job_id: str, wait_timeout: float = 10.0) -> str:
+    """Cancel a queued legacy job or a managed local process tree.
+
+    Legacy jobs already running cannot be cancelled safely. Remote termination
+    is always reported as unknown by this local-only operation.
+    """
+    return json.dumps(
+        agy_jobs.cancel(job_id, wait_timeout=wait_timeout),
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool()
+def agy_remote_start(
+    prompt: str,
+    coordinator_dir: str,
+    remote_context: dict[str, Any],
+    preflight_id: str,
+    execution_options: dict[str, Any] | None = None,
+    timeout: float = 900.0,
+) -> str:
+    """Start a managed local AGY job bound to a verified CNB/SSH context.
+
+    The remote POSIX worktree is never used as the local process cwd. This tool
+    manages only the local process and always reports remote termination as
+    unknown.
+    """
+    return json.dumps(
+        start_remote(
+            prompt,
+            coordinator_dir=coordinator_dir,
+            remote_context=remote_context,
+            preflight_id=preflight_id,
+            execution_options=execution_options,
+            timeout=_validate_timeout(timeout),
+        ),
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool()
@@ -223,6 +272,7 @@ def agy_collab_start(
     max_tasks: int = 4,
     dry_run: bool = False,
     execution_options: dict[str, Any] | None = None,
+    process_control: str = "legacy",
 ) -> str:
     """Start an explicit multi-task collaboration session.
 
@@ -248,6 +298,7 @@ def agy_collab_start(
         max_tasks=max_tasks,
         dry_run=dry_run,
         execution_options=options,
+        process_control=process_control,
     )
     return json.dumps(result, ensure_ascii=False)
 

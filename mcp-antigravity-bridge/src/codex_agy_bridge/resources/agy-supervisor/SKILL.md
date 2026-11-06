@@ -21,8 +21,12 @@ Use this sequence:
 4. Build a task contract and call `agy_preflight`.
 5. Build the required delegation prompt and choose the permission mode.
 6. Call `agy_ask`, `agy_ask_json`, `agy_start`, or the collaboration MVP.
-7. Inspect status, diff, worktree boundaries, output, and tests.
-8. Accept only a verified success; otherwise make at most two evidence-based
+7. For long headless jobs, choose `process_control="managed"` and retain its
+   job id for `agy_cancel`.
+8. For CNB/SSH work, call `agy_remote_start` only after a verified remote
+   identity is bound to a current preflight.
+9. Inspect status, diff, worktree boundaries, output, and tests.
+10. Accept only a verified success; otherwise make at most two evidence-based
    corrective calls, then stop with the exact blocker.
 
 Every delegation prompt must include task scope, owned files, forbidden files,
@@ -54,6 +58,24 @@ after delegation. The bridge does not create worktrees for `agy_start`.
 - A five-minute preflight report binds task, capability, and policy digests. It
   is not an execution lock; reread worktree, branch, and baseline identity
   before changing files.
+- `agy_start` and `agy_collab_start` default to `process_control="legacy"`.
+  Explicit `managed` jobs are headless-only, use one stream-json process, and
+  support `agy_cancel` for their owned local process tree. Closing stdin is not
+  cancellation.
+- `agy_cancel` may cancel a queued legacy job. A running legacy job returns
+  `unsupported_running_legacy`. Managed status distinguishes cancellation
+  request, local tree termination, and remote termination.
+- `remote_termination` remains `unknown` after any local exit or cancellation.
+  Never treat local job completion, SSH disconnect, or supplied evidence refs as
+  proof that the remote process stopped.
+- `agy_remote_start` accepts only development contexts with a recent
+  `caller_verified` identity. Use `coordinator_dir` as the local cwd; never pass
+  the remote POSIX worktree to a Windows process.
+- Do not send SSH private keys, passwords, tokens, or credentials in
+  `remote_context`. Remote workspace replacement, automatic remote cleanup, and
+  confirmed remote termination are unsupported.
+- On Windows, bridge-owned fixture and `.ps1` shim commands use PowerShell.
+  Never route them through `cmd.exe`.
 - `agy_start` requires an existing caller-created isolated worktree as `workdir`;
   an empty or non-directory workdir is rejected.
 - `dangerously_skip_permissions=false` is the default. Enable it only after
@@ -65,6 +87,17 @@ after delegation. The bridge does not create worktrees for `agy_start`.
   permission/authentication error, and passing acceptance criteria.
 - There are three total AGY calls per delegated task: one initial call and at
   most two corrective calls. Never issue a fourth call or widen ownership.
+
+## Managed and remote lifecycle
+
+Treat a job as three separate state layers: local process state, remote
+termination evidence, and business acceptance. `completed`, local
+`termination_confirmed=true`, or a clean SSH disconnect says nothing about the
+other layers.
+
+Managed jobs persist only redacted metadata. After a bridge restart, retain the
+worktree and identifiers; if the job was running, report `unknown` and do not
+reuse its PID or rerun automatically.
 
 ## Collaboration mode MVP
 

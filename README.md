@@ -158,6 +158,8 @@ means only that the process exited successfully; it is not acceptance proof.
 | `agy_doctor` | Read-only live CLI capability, architecture, settings digest, and policy evidence snapshot |
 | `agy_policy_probe` | Explicit local canary for session-settings isolation and global-file stability |
 | `agy_preflight` | Five-minute task-contract validation with side-effect-free and explicit active modes |
+| `agy_cancel` | Cancel a queued legacy job or a managed local process tree |
+| `agy_remote_start` | Start a managed local job bound to a verified CNB/SSH development context |
 | `agy_ask` | One bounded synchronous CLI task |
 | `agy_ask_json` | One task with validated JSON output |
 | `agy_start` | Async work in a caller-created isolated worktree |
@@ -169,6 +171,13 @@ The six execution tool names and default behavior remain stable. Optional
 `execution_options` add exact task-scoped commands only after private local
 canary evidence exists. Active policy or preflight probes require their explicit
 environment opt-ins, and model prose is never accepted as tool-execution proof.
+
+`agy_start` and `agy_collab_start` default to `legacy`. Explicit `managed`
+execution is headless-only, uses a single stream-json process, supports local
+process-tree cancellation, and never retries through a PTY. `agy_remote_start`
+uses the local coordinator directory as cwd and always reports
+`remote_termination="unknown"`. Windows script shims and bridge-owned test
+commands use PowerShell, never `cmd.exe`.
 
 ## Security and limits
 

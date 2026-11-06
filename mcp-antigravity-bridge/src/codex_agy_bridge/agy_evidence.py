@@ -13,7 +13,7 @@ from typing import Any
 
 from .agy_capabilities import CapabilitySnapshot
 
-BRIDGE_VERSION = "0.2.0"
+BRIDGE_VERSION = "0.3.0"
 POLICY_REQUIRED_CHECKS = (
     "approved_command_executed",
     "unapproved_command_blocked",

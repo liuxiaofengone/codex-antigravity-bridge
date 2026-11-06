@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from codex_agy_bridge import server
@@ -143,6 +145,50 @@ def test_async_tools_forward_parsed_execution_options(tmp_path, monkeypatch):
 
     assert len(captured) == 2
     assert all(isinstance(item["execution_options"], ExecutionOptions) for item in captured)
+
+
+def test_async_tools_forward_process_control(tmp_path, monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        server.agy_jobs,
+        "start",
+        lambda *args, **kwargs: captured.append(kwargs) or "job-1",
+    )
+    monkeypatch.setattr(
+        server.agy_collaborations,
+        "start",
+        lambda **kwargs: captured.append(kwargs) or {"state": "dry-run"},
+    )
+
+    server.agy_start(
+        "Implement",
+        workdir=str(tmp_path),
+        process_control="managed",
+    )
+    server.agy_collab_start(
+        project_dir=str(tmp_path),
+        tasks=[{
+            "id": "one",
+            "prompt": "Implement",
+            "owned_paths": ["README.md"],
+            "acceptance": ["pass"],
+        }],
+        process_control="managed",
+    )
+
+    assert captured[0]["process_control"] == "managed"
+    assert captured[1]["process_control"] == "managed"
+
+
+def test_cancel_tool_returns_structured_report(monkeypatch):
+    report = {
+        "job_id": "job-1",
+        "state": "cancelled",
+        "termination_confirmed": True,
+    }
+    monkeypatch.setattr(server.agy_jobs, "cancel", lambda *args, **kwargs: report)
+
+    assert json.loads(server.agy_cancel("job-1", wait_timeout=2)) == report
 
 
 def test_execution_options_conflict_with_skip_permissions_before_start(

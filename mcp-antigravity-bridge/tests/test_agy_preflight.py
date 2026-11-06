@@ -138,6 +138,7 @@ def test_missing_policy_evidence_is_unknown(
 def test_remote_context_is_never_treated_as_a_windows_cwd(
     tmp_path: Path, static_dependencies
 ) -> None:
+    observed_at = datetime.now(timezone.utc).isoformat()
     incomplete = agy_preflight.preflight(
         _contract(tmp_path, execution_target="remote_ssh"),
         active_probe=False,
@@ -153,7 +154,19 @@ def test_remote_context_is_never_treated_as_a_windows_cwd(
                 "worktree": "/workspace/repo",
                 "branch": "codex/task",
                 "baseline_sha": "a" * 40,
+                    "target_kind": "development",
+                    "owned_paths": ["src"],
+                    "forbidden_paths": ["production"],
                 "evidence_refs": ["artifact-1"],
+                    "identity": {
+                        "workspace_id": "workspace-1",
+                        "repository": "owner/repo",
+                        "worktree": "/workspace/repo",
+                        "branch": "codex/task",
+                        "baseline_sha": "a" * 40,
+                        "observed_at": observed_at,
+                        "source": "caller_verified",
+                    },
             },
         ),
         active_probe=False,
@@ -162,8 +175,8 @@ def test_remote_context_is_never_treated_as_a_windows_cwd(
     assert incomplete["state"] == "blocked"
     assert "remote_context_identity_incomplete" in incomplete["blockers"]
     assert Path("/workspace/repo").exists() is False
-    assert complete["state"] == "unknown", complete["blockers"]
-    assert "remote_identity_not_read" in complete["blockers"]
+    assert complete["state"] == "ready_for_probe", complete["blockers"]
+    assert complete["evidence_grade"] == "caller_verified"
     no_refs = agy_preflight.preflight(
         _contract(
             tmp_path,
@@ -175,6 +188,9 @@ def test_remote_context_is_never_treated_as_a_windows_cwd(
                 "worktree": "/workspace/repo",
                 "branch": "codex/task",
                 "baseline_sha": "a" * 40,
+                "target_kind": "development",
+                "owned_paths": ["src"],
+                "forbidden_paths": ["production"],
             },
         ),
         active_probe=False,

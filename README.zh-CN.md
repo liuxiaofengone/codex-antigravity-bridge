@@ -130,7 +130,7 @@ Codex 写后端，agy 写前端        → agy_collab_start + agy_collab_status
 <td width="25%"><strong>原生接入</strong><br><sub>注册为 MCP 服务器，Codex 桌面版和命令行都能直接调用。</sub></td>
 <td width="25%"><strong>命令行优先</strong><br><sub>复用 `agy` 自己的登录、工作区和权限流程。</sub></td>
 <td width="25%"><strong>Windows 友好</strong><br><sub>支持中文路径，并在空输出时尝试 ConPTY 回退。</sub></td>
-<td width="25%"><strong>小而清楚</strong><br><sub>本地 stdio、九个工具，没有网页服务器和数据库。</sub></td>
+<td width="25%"><strong>小而清楚</strong><br><sub>本地 stdio、十一个工具，没有网页服务器和数据库。</sub></td>
 </tr>
 </table>
 
@@ -234,13 +234,15 @@ Windows 手动配置 MCP 时，请把 `command` 写成真实 Python 可执行文
 
 <a id="tools"></a>
 
-## 🧰 九个工具：六个执行工具 + 三个诊断预检
+## 🧰 十一个工具：六个原入口 + 五个生命周期与预检工具
 
 | 工具 | 作用 | 返回 |
 | --- | --- | --- |
 | `agy_doctor` | 只读检查本机 CLI 版本、参数、Python 架构、设置摘要和已有策略证据 | 能力快照 JSON |
 | `agy_policy_probe` | 经显式授权运行三次本地 canary，验证任务级 `--settings` 的隔离、deny 优先级和全局文件不变 | 24 小时私有证据 JSON |
 | `agy_preflight` | 校验任务合同、5 分钟摘要绑定；静态模式不调用 AGY，主动模式最多提交一次 | 预检报告 JSON |
+| `agy_cancel` | 取消排队 legacy 任务或 managed 本地进程树 | 取消报告 JSON |
+| `agy_remote_start` | 将已核验 CNB/SSH 上下文绑定到本地 managed job | 本地 job 与远端证据分层 JSON |
 | `agy_ask` | 同步执行一次受控 CLI 任务 | 清理后的文本 |
 | `agy_ask_json` | 请求结构化 CLI 输出，并拒绝非法 JSON | JSON 输出文本 |
 | `agy_start` | 在调用方提供的独立 worktree 中异步启动任务 | `job_id` |
@@ -257,6 +259,19 @@ argv。非空选项必须包含精确的 `approved_commands` 和
 `agy_preflight(active_probe=true)` 还需要
 `AGY_PREFLIGHT_PROBE_OPT_IN=1`。参数存在或模型自报都不算运行验证，
 `unsupported_enforcement` 表示桥当前不能提供硬性工具拦截。
+
+`agy_start` 和 `agy_collab_start` 默认仍为 `process_control="legacy"`。
+需要取消本地运行时显式选择 `managed`，该模式仅支持 headless，使用一次
+`stream-json` 进程且不会自动 PTY 重试。`agy_cancel` 对 legacy 已运行任务
+返回 `unsupported_running_legacy`；对 managed 任务报告本地进程树是否确认
+退出。任何本地结束和取消都不能证明远端任务已结束，因此
+`remote_termination` 始终为 `unknown`。
+
+`agy_remote_start` 只用于已核验的开发工作区和 POSIX `worktree`。它把本机
+`coordinator_dir` 设为 AGY cwd，不会把 `/workspace/...` 传给 Windows。
+调用方必须提供 5 分钟内、`source="caller_verified"` 的身份回读和
+`evidence_refs`；桥不会因此自动关闭或替换 CNB 工作区。Windows 下桥自带的
+脚本 shim 和测试命令使用 PowerShell，不使用 `cmd.exe`。
 
 ## 🤝 协同开发模式 MVP
 

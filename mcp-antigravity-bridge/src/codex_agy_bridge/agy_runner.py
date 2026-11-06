@@ -25,6 +25,8 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -41,6 +43,15 @@ from .agy_result import (
     failure_details,
     parse_agy_result,
 )
+
+
+@dataclass(frozen=True)
+class ManagedAgyInvocation:
+    command: tuple[str, ...]
+    cwd: str | None
+    env: dict[str, str]
+    capability_id: str | None
+    workdir: str | None
 
 # --- ANSI / TUI noise stripping -------------------------------------------
 
@@ -169,6 +180,21 @@ def _windows_short_path(path: str) -> str:
     if not length or length >= len(buffer):
         return path
     return buffer.value
+
+
+def _agy_launch_prefix(binary: str) -> list[str]:
+    """Run PowerShell AGY shims explicitly; never route through cmd.exe."""
+    if sys.platform == "win32" and Path(binary).suffix.lower() == ".ps1":
+        return [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            binary,
+        ]
+    return [binary]
 
 
 def _normalise_proxy_url(value: str | None) -> Optional[str]:
@@ -355,7 +381,7 @@ def run_agy(
             capabilities,
             load_inherited_permissions(),
         )
-    args = [binary, "-p", prompt, *session_args]
+    args = [*_agy_launch_prefix(binary), "-p", prompt, *session_args]
     if output_format:
         args += ["--output-format", output_format]
     if dangerously_skip_permissions:
@@ -444,6 +470,63 @@ def run_agy(
     return fallback_result
 
 
+def prepare_managed_agy(
+    prompt: str,
+    workdir: Optional[str] = None,
+    dangerously_skip_permissions: bool = False,
+    execution_options: ExecutionOptions | None = None,
+) -> ManagedAgyInvocation:
+    """Build one direct stream-json AGY process invocation for a managed job."""
+    binary = find_agy()
+    if binary is None:
+        raise FileNotFoundError(
+            "agy binary not found. Install it or set AGY_PATH before using managed jobs."
+        )
+    options = execution_options or ExecutionOptions()
+    if not isinstance(options, ExecutionOptions):
+        raise TypeError("execution_options must be an ExecutionOptions instance")
+    if not options.is_default and dangerously_skip_permissions:
+        raise ValueError(
+            "execution_options conflict with dangerously_skip_permissions"
+        )
+    capability_id: str | None = None
+    if options.is_default:
+        session_args: list[str] = []
+    else:
+        capabilities = inspect_agy_capabilities()
+        capability_id = capabilities.capability_id
+        session_args = build_session_args(
+            options,
+            capabilities,
+            load_inherited_permissions(),
+        )
+    launch_workdir = workdir
+    command = [
+        *_agy_launch_prefix(binary),
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
+        *session_args,
+    ]
+    if dangerously_skip_permissions:
+        command.append("--dangerously-skip-permissions")
+    if sys.platform == "win32" and workdir and not workdir.isascii():
+        ascii_workdir = _windows_short_path(workdir)
+        if ascii_workdir.isascii():
+            launch_workdir = ascii_workdir
+        else:
+            command.extend(["--add-dir", workdir])
+            launch_workdir = None
+    return ManagedAgyInvocation(
+        command=tuple(command),
+        cwd=launch_workdir,
+        env=resolve_agy_environment(),
+        capability_id=capability_id,
+        workdir=workdir,
+    )
+
+
 def run_agy_visible(
     prompt: str,
     workdir: Optional[str] = None,
@@ -485,7 +568,7 @@ def run_agy_visible(
             capabilities,
             load_inherited_permissions(),
         )
-    args = [binary, "-p", prompt, *session_args]
+    args = [*_agy_launch_prefix(binary), "-p", prompt, *session_args]
     if output_format:
         args += ["--output-format", output_format]
     if dangerously_skip_permissions:

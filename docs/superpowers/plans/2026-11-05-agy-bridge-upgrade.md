@@ -12,7 +12,7 @@
 
 ## 全局约束
 
-- 状态：第一批（任务 1–4）已于 2026-11-06 实现并完成本机验收；不改全局权限、不恢复 Issue #43，第二批在独立审阅后重新核对能力。
+- 状态：三批（任务 1–6）已于 2026-11-06 实现并通过本机 fixture 验收；不恢复 Issue #43，真实 CNB/SSH 业务验收仍待具体任务批准。
 - 本机 CLI 已观察为 1.5.1；参数支持按 help 发现，行为支持按隔离实验确认，不只比较版本号。
 - 不自动改全局 settings；默认继承现状、不打开绕过许可、不默认开启 auto。
 - 六个旧工具名称、旧调用默认行为及成功返回约定保留；新增字段以可选方式演进。
@@ -36,6 +36,16 @@
 - 真实主动 `agy_preflight(active_probe=true)` 只提交一次 `git status --short` 检查，返回 `state=ready`、`evidence_grade=cli_tool_result`，报告 5 分钟失效。
 - 全量回归 `176 passed, 1 skipped`；skip 是不带显式 opt-in 的集成 canary，真实 canary 已在上文单独执行并记录证据，不把 skip 写成通过。
 - ARM64 环境构建 `codex_agy_bridge-0.2.0` wheel/sdist；独立安装环境完成模块、技能资源、MCP stdio 握手、九工具枚举、doctor 和静态 preflight 验证。
+
+## 第二、三批实施结果
+
+- managed 使用一次性 `stream-json` 与本地受控进程；legacy 仍是 `agy_start` 和 `agy_collab_start` 的默认路径。
+- Windows 优先尝试 Job Object。当前宿主对嵌套 Job Object 有限制时会尝试仅针对该 job PID 后代的有界进程树终止，不按 `agy/python/ssh` 名称清理；证据如实保留 `job_object_assigned` 和 `termination_confirmed`。
+- PowerShell 子进程、超时、运行时取消、其他 job 不受影响、持久化重启恢复、legacy 排队/运行取消边界均有真实本地 fixture 覆盖。
+- `agy_cancel` 区分 legacy 排队取消、运行中 `unsupported_running_legacy`、managed 本地进程树取消和永远 `unknown` 的远端状态。
+- `agy_remote_start` 将 Linux 远端工作树与 Windows 本地 cwd 分离，绑定 5 分钟预检、策略、调用方独立身份回读和 evidence refs；不提供远端停止/清理确认。
+- 全量本机结果：`203 passed, 1 skipped`。skip 仍是不带显式 opt-in 的模型 canary；新的 PowerShell canary 已单独真实执行并五项全部通过。
+- 版本升级为 `0.3.0`；未调用 CNB、SSH 或生产系统。
 
 ## 文件职责
 
@@ -120,13 +130,13 @@
 
 **接口：** `ManagedAgyProcess` 提供 `run()/request_cancel()/termination_evidence()`；`cancel(job_id: str, wait_timeout: float = 10) -> CancelReport`；新增 MCP `agy_cancel`。`JobStore` 提供 `save(record)/load(job_id)`，目录读取 `AGY_BRIDGE_STATE_DIR`，默认用户私有目录。
 
-- [ ] 先写真实本地 fixture 进程测试：legacy/managed 路由、terminal 与 managed 冲突、legacy 已运行取消不伪报终止、排队时取消、启动竞争、运行时取消、超时、持有孙进程、终止失败；其他 fixture job 必须不受影响。未创建 AGY 真实任务。
-- [ ] 为新 managed 路径使用一次性 JSON/stream-json 输出；保持单 prompt，stdout/stderr 并发读取。不要启用长期 stream-json 输入队列，也不要把关闭 stdin 当作立即取消。
-- [ ] 新 managed 路径不得因空输出自动 PTY 重跑。若保留旧接口的 legacy PTY 兼容路径，明确其行为，不能声称具备 managed 路径的单次执行保证。
-- [ ] Windows 实测 Job Object 及其子进程约束；无法可靠接管进程树时报告 termination_confirmed=false。POSIX 用自己创建的进程组。禁止按可执行文件名全局清理。
-- [ ] 写重启恢复测试：保留已知结果和标识；无法证明存活时 unknown，不凭复用 PID 认领进程、不自动重跑。日志与持久化不存完整 prompt/凭据。
-- [ ] 对 legacy state 保持兼容，在附加生命周期字段区分取消受理与停止确认；远端任务一律不从本地退出推导已停止。
-- [ ] 运行对应单元、真实进程与完整 MCP 回归后，才发布新增取消工具；本批不新增“AGY 官方会话归档”接口。
+- [x] 先写真实本地 fixture 进程测试：legacy/managed 路由、terminal 与 managed 冲突、legacy 已运行取消不伪报终止、排队时取消、启动竞争、运行时取消、超时、持有孙进程、终止失败；其他 fixture job 必须不受影响。未创建 AGY 真实任务。
+- [x] 为新 managed 路径使用一次性 JSON/stream-json 输出；保持单 prompt，stdout/stderr 并发读取。不要启用长期 stream-json 输入队列，也不要把关闭 stdin 当作立即取消。
+- [x] 新 managed 路径不得因空输出自动 PTY 重跑。若保留旧接口的 legacy PTY 兼容路径，明确其行为，不能声称具备 managed 路径的单次执行保证。
+- [x] Windows 实测 Job Object 及其子进程约束；无法可靠接管进程树时报告 termination_confirmed=false。POSIX 用自己创建的进程组。禁止按可执行文件名全局清理。
+- [x] 写重启恢复测试：保留已知结果和标识；无法证明存活时 unknown，不凭复用 PID 认领进程、不自动重跑。日志与持久化不存完整 prompt/凭据。
+- [x] 对 legacy state 保持兼容，在附加生命周期字段区分取消受理与停止确认；远端任务一律不从本地退出推导已停止。
+- [x] 运行对应单元、真实进程与完整 MCP 回归后，才发布新增取消工具；本批不新增“AGY 官方会话归档”接口。
 
 ## 第三批：CNB/SSH 任务适配
 
@@ -136,11 +146,11 @@
 
 **接口：** 新增 MCP `agy_remote_start(prompt, coordinator_dir, remote_context, preflight_id, execution_options=None, timeout=900)`，固定使用 managed。`remote_context` 固定包含 `workspace_id/repository/ssh_alias/worktree/branch/baseline_sha/owned_paths/forbidden_paths/evidence_refs`；不得传 SSH 私钥或凭据。
 
-- [ ] 先写 fixture：Linux 远端路径绝不作为 Windows cwd；本地路径存在不代表远端可用；非开发目标、失效预检、身份变化、许可变化均阻断。
-- [ ] 写首版边界 fixture：remote_termination 始终 unknown；本地完成、SSH 断连、调用方提供 evidence_refs 都不能将其升为 confirmed。要求自动远端停止/接管证明的合同返回 unsupported_remote_lifecycle；不能自动关闭或替换工作区。
-- [ ] 实现专用工具，保留旧 agy_start 的本地隔离约定。远端 ready 后开工仍重新核对 workspace/SHA；不将 `--remote-agent` 映射为 CNB SSH。
-- [ ] 真实 CNB 验收仅在用户恢复业务任务且批准具体预检命令后执行；本机 fixture 通过不能代替云端验收。本批只保存独立证据引用，不验证远端退出；真正的停止确认需另写远端任务 ID/进程归属/退出码/独立查询协议规格，获审阅后另立实施计划。
-- [ ] 回归通过后明确报告本地作业状态、远端证据和业务验收三个不同层次，再按授权提交发布。
+- [x] 先写 fixture：Linux 远端路径绝不作为 Windows cwd；本地路径存在不代表远端可用；非开发目标、失效预检、身份变化、许可变化均阻断。
+- [x] 写首版边界 fixture：remote_termination 始终 unknown；本地完成、SSH 断连、调用方提供 evidence_refs 都不能将其升为 confirmed。要求自动远端停止/接管证明的合同返回 unsupported_remote_lifecycle；不能自动关闭或替换工作区。
+- [x] 实现专用工具，保留旧 agy_start 的本地隔离约定。远端 ready 后开工仍重新核对 workspace/SHA；不将 `--remote-agent` 映射为 CNB SSH。
+- [x] 真实 CNB 验收仅在用户恢复业务任务且批准具体预检命令后执行；本机 fixture 通过不能代替云端验收。本批只保存独立证据引用，不验证远端退出；真正的停止确认需另写远端任务 ID/进程归属/退出码/独立查询协议规格，获审阅后另立实施计划。
+- [x] 回归通过后明确报告本地作业状态、远端证据和业务验收三个不同层次，再按授权提交发布。
 
 ## 发布顺序与交接
 

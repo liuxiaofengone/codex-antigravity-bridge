@@ -276,11 +276,7 @@ def _tool_event_confirms(output: str, marker: str, command: str) -> bool:
             info = step.get("tool_info")
             if isinstance(info, dict):
                 parameters = info.get("parameters")
-                command_present = (
-                    isinstance(parameters, dict)
-                    and command_lower
-                    in json.dumps(parameters, ensure_ascii=False).lower()
-                )
+                command_present = _contains_exact_string(parameters, command)
                 output = info.get("output")
                 error = info.get("error")
                 if (
@@ -293,8 +289,10 @@ def _tool_event_confirms(output: str, marker: str, command: str) -> bool:
                     return True
         event_type = str(event.get("type", event.get("event", ""))).lower()
         step_type = str(event.get("step_type", "")).lower()
-        serialized = json.dumps(event, ensure_ascii=False).lower()
-        if marker_lower not in serialized or command_lower not in serialized:
+        if (
+            marker_lower not in json.dumps(event, ensure_ascii=False).lower()
+            or not _contains_exact_string(event, command)
+        ):
             continue
         if any(
             token in f"{event_type} {step_type}"
@@ -306,6 +304,16 @@ def _tool_event_confirms(output: str, marker: str, command: str) -> bool:
             for key in ("tool_call_id", "toolCallId", "functionResponse")
         ):
             return True
+    return False
+
+
+def _contains_exact_string(value: Any, expected: str) -> bool:
+    if isinstance(value, str):
+        return value == expected
+    if isinstance(value, Mapping):
+        return any(_contains_exact_string(item, expected) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_exact_string(item, expected) for item in value)
     return False
 
 
@@ -363,6 +371,8 @@ def _event_summary(output: str, marker: str, command: str) -> dict[str, Any]:
             continue
         if not isinstance(event, dict):
             continue
+        if _contains_exact_string(event, command):
+            command_present = True
         top_level_keys.update(str(key) for key in event)
         event_type = str(event.get("type", event.get("event", "unknown")))
         step_type = event.get("step_type")
@@ -517,7 +527,10 @@ def probe_agy_policy(authorization_ref: str, timeout: float = 60.0) -> dict[str,
         return {"state": "policy_unverified", "error": str(exc), "checks": {}}
 
     marker = f"AGY_POLICY_CANARY_{uuid4().hex[:12].upper()}"
-    exact_command = f"cmd /c echo {marker}"
+    exact_command = (
+        "powershell.exe -NoProfile -NonInteractive -Command "
+        f"\"Write-Output '{marker}'\""
+    )
     if sys.platform != "win32":
         exact_command = f"sh -c 'printf {marker}'"
     scoped_options = ExecutionOptions(

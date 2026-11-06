@@ -86,7 +86,7 @@ agy -p "Reply exactly AGY_OK"
 
 应收到可用回复。只有 MCP 注册成功还不足以证明 AGY 登录和网络连接正常。
 
-当前首批功能版本为 `0.2.0`。重启 Codex 后先调用 `agy_doctor`：它只执行
+当前功能版本为 `0.3.0`。重启 Codex 后先调用 `agy_doctor`：它只执行
 `agy --version` 和 `agy --help`，并回读相关设置文件的摘要，不发送模型
 prompt。`declared_flags` 只表示本机帮助声明了参数，执行模式和沙箱仍保持
 `unknown`，直到本机 canary 提供证据。
@@ -111,13 +111,15 @@ prompt。`declared_flags` 只表示本机帮助声明了参数，执行模式和
 `agy_start` 和 `agy_status` 用于调用方提供独立工作区的异步任务；
 `agy_collab_start` 和 `agy_collab_status` 用于自动创建工作区的协作任务。
 
-新增三个诊断与预检工具：
+新增五个生命周期、诊断与远端合同工具：
 
 - `agy_doctor` 只读检查 CLI 参数、Python/架构、相关设置摘要和已有策略证据；
 - `agy_policy_probe` 在显式授权后运行三次本地 canary，验证会话隔离、
   deny/ask 保留和全局设置不变；
 - `agy_preflight` 校验任务合同。静态预检不调用模型；主动预检最多提交一次
   受限命令检查。
+- `agy_cancel` 取消排队 legacy job，或取消 managed 本地进程树；
+- `agy_remote_start` 把已核验的 CNB/SSH 开发上下文绑定到本地 managed job。
 
 `dangerously_skip_permissions` 默认关闭。`ready_for_review` 表示桥接器收到了可用输出，且未检测到进程、权限或回复错误；仍需审查改动范围并运行验收测试。
 
@@ -153,8 +155,9 @@ agy_policy_probe(
 )
 ```
 
-探针在临时 Git 仓库中只执行唯一本地 `echo` fixture，并分别验证授权、未授权
-阻断和 deny 优先级。通过证据保存在 `%USERPROFILE%\.codex-agy-bridge\`
+探针在临时 Git 仓库中只执行唯一 PowerShell `Write-Output` fixture，并分别
+验证授权、未授权阻断和 deny 优先级。Windows 测试和桥自带脚本 shim 使用
+PowerShell，不调用 `cmd.exe`。通过证据保存在 `%USERPROFILE%\.codex-agy-bridge\`
 （或 `AGY_BRIDGE_STATE_DIR`），有效期 24 小时；失败时保持
 `policy_unverified`，不要转向修改全局设置。
 
@@ -191,6 +194,90 @@ $env:AGY_PREFLIGHT_PROBE_OPT_IN = "1"
 回复或缺失工具事件只能是 `unknown`；权限拒绝为 `blocked`；要求桥提供硬性
 工具拦截时返回 `unsupported_enforcement`。预检 ready 不等于业务开工成功，
 远端任务仍需重新回读工作区、分支和基线 SHA。
+
+### Managed 作业与取消
+
+`agy_start` 和 `agy_collab_start` 默认保持 `process_control="legacy"`。需要
+可取消的本地长任务时显式传入：
+
+```json
+{
+  "process_control": "managed",
+  "display_mode": "headless"
+}
+```
+
+managed 模式只支持 headless，每次使用一个 `stream-json` 进程，不启用长期
+输入队列，也不在空输出时自动 PTY 重跑。状态会包含：
+
+- `process_control`
+- `cancellation_support=local_process_tree`
+- `termination_requested`
+- `termination_confirmed`
+- `job_object_assigned`
+- `remote_termination=unknown`
+
+Windows 优先把本地进程放入 Job Object。如果宿主 Job 限制导致无法分配嵌套
+Job Object，桥只枚举并结束当前 job 自己的 PID 进程树，不按 `python`、
+`agy` 或 `ssh` 名称全局清理；无法证明整棵树退出时仍返回
+`termination_confirmed=false`。
+
+取消调用：
+
+```text
+agy_cancel(job_id="<job id>", wait_timeout=10)
+```
+
+legacy 排队任务可通过 `Future.cancel` 取消；legacy 已运行任务返回
+`unsupported_running_legacy`，不会伪报停止。重启后只恢复脱敏元数据；原先
+在运行的 job 变为 `unknown`，不会凭旧 PID 认领进程或自动重跑。
+
+### CNB/SSH 远端合同
+
+`agy_remote_start` 只接受开发目标。`remote_context` 必须包含
+`workspace_id/repository/ssh_alias/worktree/branch/baseline_sha`、
+`target_kind="development"`、允许/禁止路径、`evidence_refs`，以及调用方
+独立回读的 `identity`：
+
+```json
+{
+  "workspace_id": "cnb-workspace",
+  "repository": "nexthorizon/project",
+  "ssh_alias": "cnb-dev",
+  "worktree": "/workspace/.worktrees/issue-44",
+  "branch": "codex/issue-44",
+  "baseline_sha": "0123456789abcdef0123456789abcdef01234567",
+  "target_kind": "development",
+  "owned_paths": ["apps/server"],
+  "forbidden_paths": ["production", ".git"],
+  "evidence_refs": ["artifact://cnb-workspace/identity"],
+  "identity": {
+    "workspace_id": "cnb-workspace",
+    "repository": "nexthorizon/project",
+    "worktree": "/workspace/.worktrees/issue-44",
+    "branch": "codex/issue-44",
+    "baseline_sha": "0123456789abcdef0123456789abcdef01234567",
+    "observed_at": "2026-11-06T10:00:00+08:00",
+    "source": "caller_verified"
+  }
+}
+```
+
+身份回读必须在 5 分钟内，且字段与声明完全一致。`worktree` 是 Linux POSIX
+路径，只用于调用方通过已授权 SSH 命令工作；桥的本地 AGY 进程 cwd 始终是
+独立的 `coordinator_dir`，不会把 `/workspace/...` 传给 Windows。
+
+桥不保存 SSH 私钥、密码或令牌，不自动关闭或替换 CNB 工作区。开工会绑定
+有效 `preflight_id`、能力摘要、策略摘要和 `execution_options`。状态报告
+始终分成：
+
+- `local_job_status`：本地 managed 进程状态；
+- `remote_termination=unknown`：桥不能证明远端进程已停止；
+- `business_acceptance=not_started`：业务改动和测试尚未验收。
+
+要求自动远端停止、清理或接管证明的合同返回
+`unsupported_remote_lifecycle`。真实 CNB 验收仍须在具体业务任务恢复后批准
+目标、身份和命令，不能以本机 fixture 代替。
 
 ## 5. 本地验证与开源文件范围
 

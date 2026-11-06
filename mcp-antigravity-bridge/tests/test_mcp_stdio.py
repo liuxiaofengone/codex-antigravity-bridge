@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import subprocess
@@ -49,8 +50,10 @@ def test_mcp_stdio_server_lists_all_tools() -> None:
         "agy_status",
         "agy_collab_start",
         "agy_collab_status",
+        "agy_cancel",
         "agy_preflight",
         "agy_policy_probe",
+        "agy_remote_start",
     }
 
 
@@ -119,8 +122,16 @@ async def _permission_failure_round_trip(tmp_path: Path) -> None:
         }],
     })
     if os.name == "nt":
-        binary = tmp_path / "agy.cmd"
-        binary.write_text("@echo off\necho " + payload + "\nexit /b 0\n", encoding="utf-8")
+        binary = tmp_path / "agy.ps1"
+        encoded = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+        binary.write_text(
+            "$bytes = [Convert]::FromBase64String('"
+            + encoded
+            + "')\n"
+            "[Console]::Out.Write([Text.Encoding]::UTF8.GetString($bytes))\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
     else:
         binary = tmp_path / "agy"
         binary.write_text("#!/bin/sh\nprintf '%s\\n' '" + payload + "'\n", encoding="utf-8")

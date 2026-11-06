@@ -204,7 +204,10 @@ def test_runner_appends_verified_session_args(monkeypatch) -> None:
 
 
 def test_stream_step_update_can_prove_tool_execution() -> None:
-    command = "cmd /c echo AGY_POLICY_CANARY_TEST"
+    command = (
+        "powershell.exe -NoProfile -NonInteractive -Command "
+        "\"Write-Output 'AGY_POLICY_CANARY_TEST'\""
+    )
     marker = "AGY_POLICY_CANARY_TEST"
     output = json.dumps({
         "type": "step_update",
@@ -218,7 +221,10 @@ def test_stream_step_update_can_prove_tool_execution() -> None:
 
 
 def test_real_stream_step_shape_requires_done_and_command_output() -> None:
-    command = "cmd /c echo AGY_POLICY_CANARY_TEST"
+    command = (
+        "powershell.exe -NoProfile -NonInteractive -Command "
+        "\"Write-Output 'AGY_POLICY_CANARY_TEST'\""
+    )
     marker = "AGY_POLICY_CANARY_TEST"
     done = json.dumps({
         "event": "step_update",
@@ -250,6 +256,9 @@ def test_real_stream_step_shape_requires_done_and_command_output() -> None:
     assert agy_policy._tool_event_confirms(
         attempted_without_output, marker, command
     ) is False
+    summary = agy_policy._event_summary(done, marker, command)
+    assert summary["command_present"] is True
+    assert summary["tool_execution_confirmed"] is True
 
 
 def test_real_tool_error_marks_permission_denial() -> None:
@@ -261,7 +270,12 @@ def test_real_tool_error_marks_permission_denial() -> None:
             "tool_name": "run_command",
             "tool_info": {
                 "name": "run_command",
-                "parameters": {"CommandLine": "cmd /c echo test"},
+                "parameters": {
+                    "CommandLine": (
+                        "powershell.exe -NoProfile -NonInteractive -Command "
+                        "\"Write-Output 'test'\""
+                    )
+                },
                 "error": "Permission denied. Matches user-configured deny rule.",
             },
         },

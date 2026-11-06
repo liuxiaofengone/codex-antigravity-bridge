@@ -11,6 +11,7 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import RLock
 from typing import Any, Mapping
 
 from .agy_capabilities import CapabilityDiscoveryError, inspect_agy_capabilities
@@ -32,10 +33,16 @@ _REMOTE_REQUIRED = {
     "worktree",
     "branch",
     "baseline_sha",
+    "target_kind",
+    "owned_paths",
+    "forbidden_paths",
     "evidence_refs",
+    "identity",
 }
 _HEX_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 _PREFLIGHT_TTL = timedelta(minutes=5)
+_PREFLIGHTS: dict[str, tuple[dict[str, Any], "TaskContract"]] = {}
+_PREFLIGHTS_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,7 @@ class TaskContract:
         remote_context = raw.get("remote_context")
         if remote_context is not None and not isinstance(remote_context, Mapping):
             raise ValueError("remote_context must be an object")
+        context_map = dict(remote_context) if remote_context is not None else {}
         return cls(
             task_id=_required_string(raw, "task_id"),
             capability_id=_required_string(raw, "capability_id"),
@@ -99,15 +107,22 @@ class TaskContract:
             authorization_ref=(
                 authorization_ref.strip() if isinstance(authorization_ref, str) else None
             ),
-            owned_paths=_path_list(raw.get("owned_paths", []), "owned_paths"),
+            owned_paths=_path_list(
+                raw.get("owned_paths", context_map.get("owned_paths", [])),
+                "owned_paths",
+            ),
             forbidden_paths=_path_list(
-                raw.get("forbidden_paths", []), "forbidden_paths"
+                raw.get(
+                    "forbidden_paths",
+                    context_map.get("forbidden_paths", []),
+                ),
+                "forbidden_paths",
             ),
             preflight_commands=_string_list(
                 raw["preflight_commands"], "preflight_commands"
             ),
             requires_hard_tool_interception=requires_hard,
-            remote_context=dict(remote_context) if remote_context is not None else None,
+            remote_context=context_map if remote_context is not None else None,
             caller_evidence_refs=_string_list(
                 raw.get("caller_evidence_refs", []), "caller_evidence_refs"
             ),
@@ -149,17 +164,56 @@ def _path_list(value: Any, name: str) -> tuple[str, ...]:
 def _remote_context_complete(context: Mapping[str, Any] | None) -> bool:
     if not context or not _REMOTE_REQUIRED.issubset(context):
         return False
+    list_fields = {"owned_paths", "forbidden_paths", "evidence_refs"}
     if any(
         not isinstance(context.get(key), str) or not str(context[key]).strip()
-        for key in _REMOTE_REQUIRED - {"evidence_refs"}
+        for key in _REMOTE_REQUIRED - list_fields - {"identity"}
     ):
         return False
     if not _HEX_SHA.fullmatch(str(context["baseline_sha"])):
         return False
-    evidence_refs = context.get("evidence_refs", [])
-    return isinstance(evidence_refs, list) and all(
-        isinstance(item, str) and item.strip() for item in evidence_refs
-    )
+    for key in list_fields:
+        items = context.get(key)
+        if not isinstance(items, list) or any(
+            not isinstance(item, str) or not item.strip() for item in items
+        ):
+            return False
+    identity = context.get("identity")
+    return isinstance(identity, Mapping)
+
+
+def _remote_identity_problem(
+    context: Mapping[str, Any],
+    *,
+    now: datetime | None = None,
+) -> str | None:
+    identity = context.get("identity")
+    if not isinstance(identity, Mapping):
+        return "remote_identity_not_read"
+    keys = {
+        "workspace_id",
+        "repository",
+        "worktree",
+        "branch",
+        "baseline_sha",
+    }
+    if any(identity.get(key) != context.get(key) for key in keys):
+        return "remote_identity_changed"
+    if identity.get("source") != "caller_verified":
+        return "remote_identity_unverified"
+    try:
+        observed_at = datetime.fromisoformat(
+            str(identity["observed_at"]).replace("Z", "+00:00")
+        )
+    except (KeyError, ValueError):
+        return "remote_identity_stale"
+    if observed_at.tzinfo is None:
+        return "remote_identity_stale"
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    age = current - observed_at.astimezone(timezone.utc)
+    if age < timedelta(seconds=-30) or age > _PREFLIGHT_TTL:
+        return "remote_identity_stale"
+    return None
 
 
 def _report(
@@ -198,6 +252,48 @@ def _report(
     }
 
 
+def remember_preflight(
+    report: Mapping[str, Any],
+    contract: TaskContract | Mapping[str, Any],
+) -> None:
+    parsed = TaskContract.from_mapping(contract)
+    preflight_id = str(report.get("preflight_id", ""))
+    if not preflight_id:
+        raise ValueError("preflight report has no id")
+    with _PREFLIGHTS_LOCK:
+        _PREFLIGHTS[preflight_id] = (dict(report), parsed)
+
+
+def load_preflight_entry(
+    preflight_id: str,
+) -> tuple[dict[str, Any], TaskContract] | None:
+    with _PREFLIGHTS_LOCK:
+        entry = _PREFLIGHTS.get(preflight_id)
+    if entry is None:
+        return None
+    report, contract = entry
+    try:
+        expires_at = datetime.fromisoformat(str(report["expires_at"]))
+    except (KeyError, ValueError):
+        return entry
+    if expires_at.tzinfo is None or expires_at <= datetime.now(timezone.utc):
+        return entry
+    return entry
+
+
+def clear_preflight_reports() -> None:
+    with _PREFLIGHTS_LOCK:
+        _PREFLIGHTS.clear()
+
+
+def _remember_and_return(
+    report: dict[str, Any],
+    contract: TaskContract,
+) -> dict[str, Any]:
+    remember_preflight(report, contract)
+    return report
+
+
 def preflight(
     contract: TaskContract | Mapping[str, Any],
     active_probe: bool = False,
@@ -217,16 +313,19 @@ def preflight(
     except CapabilityDiscoveryError:
         checks["capability"] = "unknown"
         unknown.append("capability_unavailable")
-        return _report(
+        return _remember_and_return(
+            _report(
+                parsed,
+                parsed.capability_id,
+                "",
+                "unknown",
+                checks,
+                unknown,
+                enforcement,
+                evidence_grade,
+                now,
+            ),
             parsed,
-            parsed.capability_id,
-            "",
-            "unknown",
-            checks,
-            unknown,
-            enforcement,
-            evidence_grade,
-            now,
         )
     if capability.capability_id != parsed.capability_id:
         checks["capability"] = "blocked"
@@ -264,8 +363,20 @@ def preflight(
             checks["target"] = "blocked"
             blockers.append("remote_context_identity_incomplete")
         else:
-            checks["target"] = "unknown"
-            unknown.append("remote_identity_not_read")
+            identity_problem = _remote_identity_problem(
+                parsed.remote_context,
+                now=now,
+            )
+            if identity_problem == "remote_identity_changed":
+                checks["target"] = "blocked"
+                blockers.append(identity_problem)
+            elif identity_problem:
+                checks["target"] = "unknown"
+                unknown.append(identity_problem)
+            else:
+                checks["target"] = "passed"
+                checks["remote_identity"] = "caller_verified"
+                evidence_grade = "caller_verified"
     else:
         checks["target"] = "passed"
 
@@ -309,11 +420,11 @@ def preflight(
         now,
     )
     if not active_probe or state != "ready_for_probe":
-        return report
+        return _remember_and_return(report, parsed)
     if os.environ.get("AGY_PREFLIGHT_PROBE_OPT_IN") != "1":
         report["state"] = "blocked"
         report["blockers"].append("active_probe_opt_in_required")
-        return report
+        return _remember_and_return(report, parsed)
     assert inherited is not None
     observation = _run_active_probe(
         parsed,
@@ -338,7 +449,7 @@ def preflight(
     else:
         report["state"] = observed_state
     report["blockers"] = list(dict.fromkeys(report["blockers"]))
-    return report
+    return _remember_and_return(report, parsed)
 
 
 def _command_from_tool_step(step: Mapping[str, Any]) -> str | None:

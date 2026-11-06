@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Added explicit `legacy` and `managed` asynchronous job lifecycles while preserving the legacy default.
+- Added local process-tree cancellation, `agy_cancel`, restart-safe private job metadata, and a PowerShell-only Windows test and script-shim path.
+- Added explicit CNB/SSH task contracts through `agy_remote_start`; remote POSIX paths are never used as local cwd and remote termination remains unknown.
+
 ## 0.2.0
 
 - Added side-effect-free `agy_doctor` capability discovery for the live AGY CLI and relevant settings.
