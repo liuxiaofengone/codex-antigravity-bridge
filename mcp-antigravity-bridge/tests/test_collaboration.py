@@ -351,8 +351,14 @@ def test_status_preserves_permission_failure_kind_with_zero_exit(tmp_path: Path)
     jobs.states[job_id] = {
         "job_id": job_id, "state": "failed", "exit_code": 0,
         "error_kind": "permission", "error": "AGY_PERMISSION_DENIED: RunCommand",
+        "reason": "permission_blocked", "retryable": False,
+        "conversation_id": "test-conversation",
+        "failed_command": "git status --short",
     }
     status = registry.status(started["session_id"])
     assert status["state"] == "failed"
     assert status["tasks"][0]["exit_code"] == 0
     assert status["tasks"][0]["error_kind"] == "permission"
+    assert status["tasks"][0]["reason"] == "permission_blocked"
+    assert status["tasks"][0]["retryable"] is False
+    assert status["tasks"][0]["failed_command"] == "git status --short"

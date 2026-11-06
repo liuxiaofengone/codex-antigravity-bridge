@@ -9,7 +9,7 @@ import pytest
 
 from codex_agy_bridge import agy_runner, server
 from codex_agy_bridge.agy_jobs import AgyJobRegistry
-from codex_agy_bridge.agy_runner import AgyResult
+from codex_agy_bridge.agy_result import AgyResult
 
 
 def envelope(response="", denied_actions=None, status="SUCCESS", **extra):

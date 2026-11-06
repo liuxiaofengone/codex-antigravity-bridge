@@ -110,7 +110,11 @@ async def _permission_failure_round_trip(tmp_path: Path) -> None:
         "conversation_id": "test-conversation",
         "status": "SUCCESS",
         "response": "",
-        "denied_actions": ["RunCommand"],
+        "denied_actions": [{
+            "action": "RunCommand",
+            "command": "git status --short",
+            "resource": "command(git status --short)",
+        }],
     })
     if os.name == "nt":
         binary = tmp_path / "agy.cmd"
@@ -145,6 +149,10 @@ async def _permission_failure_round_trip(tmp_path: Path) -> None:
             assert status["state"] == "failed"
             assert status["error_kind"] == "permission"
             assert status["exit_code"] == 0
+            assert status["reason"] == "permission_blocked"
+            assert status["conversation_id"] == "test-conversation"
+            assert status["failed_command"] == "git status --short"
+            assert status["retryable"] is False
 
 
 def test_mcp_stdio_soft_permission_failure_is_error(tmp_path: Path) -> None:

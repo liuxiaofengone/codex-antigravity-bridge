@@ -70,15 +70,14 @@ def test_status_reports_nonzero_exit_as_failed(monkeypatch):
             break
         time.sleep(0.01)
 
-    assert status == {
-        "job_id": job_id,
-        "state": "failed",
-        "text": "agy failed",
-        "exit_code": 1,
-        "used_pty": False,
-        "error_kind": "unknown",
-        "error": "AGY_FAILED: agy exited with code 1: agy failed",
-    }
+    assert status["job_id"] == job_id
+    assert status["state"] == "failed"
+    assert status["text"] == "agy failed"
+    assert status["exit_code"] == 1
+    assert status["used_pty"] is False
+    assert status["error_kind"] == "unknown"
+    assert status["error"].startswith("AGY_FAILED: agy exited with code 1: agy failed")
+    assert status["reason"] == "exit_code_1"
 
 
 def test_status_reports_login_required_for_authentication_failure(monkeypatch):

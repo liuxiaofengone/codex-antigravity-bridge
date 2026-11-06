@@ -16,7 +16,6 @@ Reference implementations:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import select
@@ -26,9 +25,16 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlsplit
+
+from .agy_result import (
+    AgyResult,
+    agy_result_error_kind,
+    describe_agy_failure,
+    failure_details,
+    parse_agy_result,
+)
 
 # --- ANSI / TUI noise stripping -------------------------------------------
 
@@ -157,17 +163,6 @@ def _windows_short_path(path: str) -> str:
     if not length or length >= len(buffer):
         return path
     return buffer.value
-
-
-# --- runners ---------------------------------------------------------------
-
-
-@dataclass
-class AgyResult:
-    text: str
-    exit_code: int
-    used_pty: bool = False
-    stderr: str = ""
 
 
 def _normalise_proxy_url(value: str | None) -> Optional[str]:
@@ -316,93 +311,6 @@ def classify_agy_error(text: str, stderr: str = "") -> str:
     return "unknown"
 
 
-def _agy_envelope(text: str) -> dict | None:
-    """Recognize CLI metadata without treating arbitrary answer JSON as metadata."""
-    try:
-        payload = json.loads(text)
-    except (ValueError, TypeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("event") == "result":
-        payload = payload.get("result")
-    if not isinstance(payload, dict):
-        return None
-    status = payload.get("status", payload.get("result"))
-    if (
-        isinstance(status, str)
-        and status in {
-            "SUCCESS", "ERROR", "FAILED", "FAILURE", "CANCELLED", "CANCELED",
-            "INTERRUPTED", "TIMEOUT", "ABORTED", "INVALID", "WAITING", "RUNNING",
-        }
-        and ("conversation_id" in payload or "denied_actions" in payload)
-        and any(key in payload for key in ("response", "error", "denied_actions"))
-    ):
-        return payload
-    return None
-
-
-def agy_result_error_kind(result: AgyResult) -> str | None:
-    """Return a failure kind, including CLI soft failures that still exit zero."""
-    payload = _agy_envelope(result.text)
-    if payload and payload.get("denied_actions"):
-        return "permission"
-    if classify_agy_error("", result.stderr) == "permission":
-        return "permission"
-    if result.exit_code != 0:
-        return classify_agy_error(result.text, result.stderr)
-    if payload:
-        status = payload.get("status", payload.get("result"))
-        if status != "SUCCESS" or payload.get("error"):
-            return classify_agy_error(str(payload.get("error", "")), result.stderr)
-        response = payload.get("response")
-        if not isinstance(response, str) or not response.strip():
-            return "empty_output"
-    if not result.text.strip():
-        return "empty_output"
-    return None
-
-
-def describe_agy_failure(result: AgyResult) -> str:
-    detail = result.text or result.stderr or "agy returned no diagnostic output"
-    kind = agy_result_error_kind(result) or "unknown"
-    if kind == "permission":
-        payload = _agy_envelope(result.text)
-        if result.stderr:
-            detail = result.stderr
-        elif payload:
-            detail = (
-                f"Denied actions: {json.dumps(payload.get('denied_actions'), ensure_ascii=False)}; "
-                f"conversation_id: {payload.get('conversation_id', 'unknown')}"
-            )
-        return (
-            "AGY_PERMISSION_DENIED: agy could not obtain tool approval in headless mode. "
-            "Review the requested action interactively in the same workspace, or explicitly "
-            "authorize a narrow permissions.allow rule before retrying. "
-            f"Original error: {detail}"
-        )
-    if kind == "empty_output":
-        return (
-            "AGY_EMPTY_OUTPUT: agy returned no usable response. "
-            "A zero exit code or CLI SUCCESS alone does not confirm task completion. "
-            f"Original output: {detail}"
-        )
-    if kind == "network":
-        return (
-            "AGY_PROXY_ERROR: agy could not reach its network endpoint. "
-            "Check the local proxy or TUN mode before retrying. "
-            f"Original error: {detail}"
-        )
-    if kind == "authentication":
-        return (
-            "AGY_LOGIN_REQUIRED: agy authentication is required. "
-            "Run `agy` interactively through the working proxy, complete login, "
-            "then tell Codex to retry the task once. "
-            f"Original error: {detail}"
-        )
-    return f"AGY_FAILED: agy exited with code {result.exit_code}: {detail}"
-
-
 def run_agy(
     prompt: str,
     workdir: Optional[str] = None,
@@ -443,23 +351,28 @@ def run_agy(
 
     environment = resolve_agy_environment()
     direct = _run_subprocess(args, launch_workdir, timeout, environment)
-    direct_text = clean_agy_output(direct.stdout)
-    direct_stderr = clean_agy_output(direct.stderr)
+    direct_result = parse_agy_result(
+        direct.stdout,
+        direct.stderr,
+        direct.returncode,
+        output_format=output_format,
+        used_pty=False,
+        workdir=launch_workdir,
+    )
+    direct_text = direct_result.text
+    direct_stderr = direct_result.stderr
+    direct_clean_text = clean_agy_output(direct.stdout)
+    direct_error = agy_result_error_kind(direct_result)
     # A denied tool is not the isatty bug. Re-running it in a PTY would repeat
     # the denied operation and cannot supply the missing user authorization.
     if (
-        direct_text
+        direct_clean_text
         or direct.returncode != 0
-        or classify_agy_error("", direct_stderr) == "permission"
+        or direct_error not in {None, "empty_output"}
     ):
         if classify_agy_error(direct_text, direct_stderr) == "network":
             resolve_agy_environment(force=True)
-        return AgyResult(
-            text=direct_text or direct_stderr or "agy returned no diagnostic output",
-            exit_code=direct.returncode,
-            used_pty=False,
-            stderr=direct_stderr,
-        )
+        return direct_result
 
     try:
         pty_text, exit_code = _run_with_pty(args, pty_workdir, timeout, environment)
@@ -476,11 +389,13 @@ def run_agy(
 
     cleaned_pty_text = clean_agy_output(pty_text)
     if cleaned_pty_text:
-        return AgyResult(
-            text=cleaned_pty_text,
-            exit_code=direct.returncode if exit_code == -1 else exit_code,
+        return parse_agy_result(
+            pty_text,
+            direct_stderr,
+            direct.returncode if exit_code == -1 else exit_code,
+            output_format=output_format,
             used_pty=True,
-            stderr=direct_stderr,
+            workdir=pty_workdir,
         )
 
     fallback_exit_code = (
@@ -488,12 +403,17 @@ def run_agy(
         if direct.returncode != 0
         else (exit_code if exit_code != 0 else -1)
     )
-    return AgyResult(
-        text=direct_stderr or "agy produced no output; PTY fallback was unavailable",
-        exit_code=fallback_exit_code,
+    fallback_result = parse_agy_result(
+        "",
+        direct_stderr,
+        0,
+        output_format=output_format,
         used_pty=True,
-        stderr=direct_stderr,
+        workdir=pty_workdir,
     )
+    fallback_result.exit_code = fallback_exit_code
+    fallback_result.text = "agy produced no output; PTY fallback was unavailable"
+    return fallback_result
 
 
 def run_agy_visible(

@@ -387,7 +387,25 @@ class CollaborationRegistry:
             if record.spec.forbidden_paths:
                 task_snapshot["forbidden_paths"] = list(record.spec.forbidden_paths)
             if include_job_output:
-                for key in ("text", "error", "error_kind", "exit_code", "used_pty"):
+                for key in (
+                    "text",
+                    "error",
+                    "error_kind",
+                    "reason",
+                    "retryable",
+                    "conversation_id",
+                    "cli_status",
+                    "denied_actions",
+                    "failed_command",
+                    "permission_resource",
+                    "workdir",
+                    "capability_id",
+                    "remediation",
+                    "evidence",
+                    "finished_reason",
+                    "exit_code",
+                    "used_pty",
+                ):
                     if key in job_status:
                         task_snapshot[key] = job_status[key]
             task_snapshots.append(task_snapshot)

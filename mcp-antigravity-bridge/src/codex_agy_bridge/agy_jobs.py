@@ -13,7 +13,12 @@ from typing import Any
 from uuid import uuid4
 
 from .agy_runner import (
-    AgyResult, agy_result_error_kind, describe_agy_failure, run_agy, run_agy_visible,
+    AgyResult,
+    agy_result_error_kind,
+    describe_agy_failure,
+    failure_details,
+    run_agy,
+    run_agy_visible,
 )
 
 
@@ -113,7 +118,9 @@ class AgyJobRegistry:
             "used_pty": result.used_pty,
         }
         if state == "failed":
-            status["error_kind"] = error_kind
+            for key, value in failure_details(result).items():
+                if value is not None:
+                    status[key] = value
             status["error"] = describe_agy_failure(result)
         return status
 
