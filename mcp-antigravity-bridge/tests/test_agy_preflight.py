@@ -336,6 +336,20 @@ def test_active_output_permission_error_is_blocked() -> None:
     assert "permission_blocked" in result["blockers"]
 
 
+def test_active_output_nonzero_exit_without_tool_evidence_is_blocked() -> None:
+    result = agy_preflight._evaluate_active_output(
+        ("git status --short",),
+        json.dumps({
+            "event": "result",
+            "result": {"response": "not actually run", "denied_actions": []},
+        }),
+        exit_code=3,
+    )
+
+    assert result["state"] == "blocked"
+    assert "probe_failed" in result["blockers"]
+
+
 def test_active_output_non_permission_error_is_not_mislabeled() -> None:
     command = "python missing-script.py"
     output = _probe_event(

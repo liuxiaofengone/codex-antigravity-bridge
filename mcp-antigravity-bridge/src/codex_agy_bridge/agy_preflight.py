@@ -355,6 +355,8 @@ def _command_from_tool_step(step: Mapping[str, Any]) -> str | None:
 def _evaluate_active_output(
     commands: tuple[str, ...],
     output: str,
+    *,
+    exit_code: int = 0,
 ) -> dict[str, Any]:
     expected = set(commands)
     completed: set[str] = set()
@@ -415,6 +417,15 @@ def _evaluate_active_output(
             "checks": {"preflight_commands": "tool_error"},
             "blockers": ["tool_error"],
             "evidence_grade": "cli_tool_result",
+        }
+    if exit_code != 0:
+        return {
+            "state": "blocked",
+            "checks": {"preflight_commands": "failed"},
+            "blockers": ["probe_failed"],
+            "evidence_grade": (
+                "cli_tool_result" if tool_events or result_event else "unavailable"
+            ),
         }
     if expected and expected.issubset(completed):
         return {
@@ -507,6 +518,7 @@ def _run_active_probe(
     return _evaluate_active_output(
         contract.preflight_commands,
         result.stdout + "\n" + result.stderr,
+        exit_code=result.returncode,
     )
 
 

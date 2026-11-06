@@ -310,11 +310,37 @@ def _tool_event_confirms(output: str, marker: str, command: str) -> bool:
 
 
 def _event_was_denied(output: str) -> bool:
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(event, Mapping):
+            continue
+        result_payload = event.get("result")
+        if isinstance(result_payload, Mapping) and result_payload.get(
+            "denied_actions"
+        ):
+            return True
+        step = event.get("step_update")
+        if isinstance(step, Mapping):
+            info = step.get("tool_info")
+            if isinstance(info, Mapping):
+                error = str(info.get("error", "")).lower()
+                if any(
+                    marker in error
+                    for marker in (
+                        "permission",
+                        "denied",
+                        "deny rule",
+                        "auto-denied",
+                    )
+                ):
+                    return True
     lowered = output.lower()
     return any(
         marker in lowered
         for marker in (
-            "denied_actions",
             "user denied permission",
             "permission check failed",
             "permission denied",
@@ -558,20 +584,20 @@ def probe_agy_policy(authorization_ref: str, timeout: float = 60.0) -> dict[str,
         finally:
             shutil.rmtree(fixture, ignore_errors=True)
         after = _policy_settings_snapshot(settings_paths)
+        unapproved_blocked = (
+            not _tool_event_confirms(session_b, marker, exact_command)
+            and _event_was_denied(session_b)
+        )
         checks = {
             "approved_command_executed": _tool_event_confirms(
                 session_a, marker, exact_command
             ),
-            "unapproved_command_blocked": not _tool_event_confirms(
-                session_b, marker, exact_command
-            ),
+            "unapproved_command_blocked": unapproved_blocked,
             "deny_ask_preserved": not _tool_event_confirms(
                 session_c, marker, exact_command
             ) and _event_was_denied(session_c),
             "global_settings_unchanged": before == after,
-            "session_isolation": not _tool_event_confirms(
-                session_b, marker, exact_command
-            ),
+            "session_isolation": unapproved_blocked,
         }
         diagnostics = {
             "session_a": _event_summary(session_a, marker, exact_command),

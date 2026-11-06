@@ -34,7 +34,7 @@
 - 真实本机 canary 在临时 Git 仓库中验证了 authorized、unapproved 和 explicit deny 三种会话；A 的 `state=DONE` 工具输出包含唯一标记，B 被拒绝，C 命中 deny 规则，设置文件字节未变化。私有证据有效 24 小时。
 - 真实 `agy_ask(execution_options=...)` 成功执行唯一任务级 echo；默认 argv 和六个旧工具名称保持不变。
 - 真实主动 `agy_preflight(active_probe=true)` 只提交一次 `git status --short` 检查，返回 `state=ready`、`evidence_grade=cli_tool_result`，报告 5 分钟失效。
-- 全量回归 `174 passed, 1 skipped`；skip 是不带显式 opt-in 的集成 canary，真实 canary 已在上文单独执行并记录证据，不把 skip 写成通过。
+- 全量回归 `176 passed, 1 skipped`；skip 是不带显式 opt-in 的集成 canary，真实 canary 已在上文单独执行并记录证据，不把 skip 写成通过。
 - ARM64 环境构建 `codex_agy_bridge-0.2.0` wheel/sdist；独立安装环境完成模块、技能资源、MCP stdio 握手、九工具枚举、doctor 和静态 preflight 验证。
 
 ## 文件职责

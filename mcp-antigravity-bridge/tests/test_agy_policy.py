@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import os
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -290,9 +291,71 @@ def test_policy_probe_does_not_accept_model_self_report(monkeypatch, tmp_path) -
 
     result = agy_policy.probe_agy_policy("user-approved-1", timeout=1)
 
-    assert result["state"] == "policy_unverified"
+    assert result["state"] == "policy_unverified", result["checks"]
     assert result["diagnostics"]["session_a"]["event_types"] == ["message"]
     assert result["diagnostics"]["session_a"]["top_level_keys"] == ["content", "type"]
     assert result["diagnostics"]["session_a"]["type_values"] == ["message"]
     assert result["diagnostics"]["session_a"]["tool_shapes"] == []
     assert "super-secret" not in json.dumps(result)
+
+
+def test_policy_probe_requires_observed_unapproved_block(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("AGY_POLICY_PROBE_OPT_IN", "1")
+    monkeypatch.setenv("AGY_BRIDGE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setattr(
+        "codex_agy_bridge.agy_capabilities.inspect_agy_capabilities",
+        lambda refresh=False: _capabilities(),
+    )
+    monkeypatch.setattr("codex_agy_bridge.agy_runner.find_agy", lambda: "agy")
+    monkeypatch.setattr(agy_policy, "load_inherited_permissions", lambda: {
+        "permissions": {"allow": []},
+    })
+    calls = {"count": 0}
+
+    def fake_call(binary, prompt, workdir, timeout, args):
+        calls["count"] += 1
+        command = re.search(r"Run exactly `([^`]+)`", prompt).group(1)
+        marker = re.search(r"AGY_POLICY_CANARY_[A-F0-9]+", command).group(0)
+        if calls["count"] == 1:
+            return json.dumps({
+                "event": "step_update",
+                "step_update": {
+                    "state": "DONE",
+                    "step_type": "tool",
+                    "tool_info": {
+                        "name": "run_command",
+                        "parameters": {"CommandLine": command},
+                        "output": marker,
+                    },
+                },
+            })
+        if calls["count"] == 2:
+            return json.dumps({
+                "event": "result",
+                "result": {
+                    "status": "SUCCESS",
+                    "response": "not executed",
+                    "denied_actions": [],
+                },
+            })
+        return json.dumps({
+            "event": "step_update",
+            "step_update": {
+                "state": "ERROR",
+                "step_type": "tool",
+                "tool_info": {
+                    "name": "run_command",
+                    "parameters": {"CommandLine": command},
+                    "error": "Permission denied: deny rule",
+                },
+            },
+        })
+
+    monkeypatch.setattr(agy_policy, "_run_canary_call", fake_call)
+
+    result = agy_policy.probe_agy_policy("user-approved-1", timeout=1)
+
+    assert result["state"] == "policy_unverified", result["checks"]
+    assert result["checks"]["unapproved_command_blocked"] is False

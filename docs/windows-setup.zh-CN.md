@@ -9,7 +9,16 @@
 - Antigravity CLI，且 `agy` 可以在终端运行。
 - 首次真实调用前，使用 `agy` 完成交互式登录。
 
-Windows ARM64 如果在安装加密依赖时遇到缺少 wheel、OpenSSL 或 Rust 编译错误，可以使用 x64 Python 3.12 建立环境。选择自己安装的 Python，不依赖某台电脑的 Codex 缓存目录。
+优先使用本机 ARM64 Python。若 Python 3.14 ARM64 在安装最新
+`cryptography` 时尝试从源码编译并报缺少 OpenSSL，可先安装仍提供
+`cp311-abi3-win_arm64` 预编译 wheel 的
+`cryptography==46.0.3`，再安装本项目。只有原生 wheel 链确实不可用时才
+考虑 x64 环境；那会丢失原生 ARM64 运行时优势。当前已验证的独立安装命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install "cryptography==46.0.3"
+.\.venv\Scripts\python.exe -m pip install -e ".\mcp-antigravity-bridge[winpty]"
+```
 
 ## 1. 从源码建立独立环境
 

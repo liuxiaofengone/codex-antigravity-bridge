@@ -30,6 +30,9 @@ mcp = FastMCP(
         "Use agy_collab_start and agy_collab_status for the MVP collaboration mode: "
         "the bridge creates separate Git worktrees and starts bounded tasks, but "
         "Codex reviews and merges branches manually. "
+        "Use agy_doctor for side-effect-free capability discovery, "
+        "agy_policy_probe for explicitly authorized task-settings evidence, "
+        "and agy_preflight before delegation; static preflight never starts AGY. "
         "Only pass dangerously_skip_permissions=true after the user explicitly "
         "authorizes that exact trusted worktree and task."
     ),
