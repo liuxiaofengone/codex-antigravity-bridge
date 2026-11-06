@@ -27,8 +27,6 @@ _ALLOWED_FIELDS = {
     "retryable",
     "conversation_id",
     "cli_status",
-    "failed_command",
-    "permission_resource",
     "capability_id",
     "finished_reason",
     "remote_termination",

@@ -367,6 +367,19 @@ class AgyJobRegistry:
             process = record.process
             process_control = record.process_control
 
+        if future is not None and future.done():
+            current = self.status(job_id)
+            return {
+                "job_id": job_id,
+                "state": current["state"],
+                "cancel_requested": False,
+                "cancellation_supported": False,
+                "termination_confirmed": False,
+                "local_termination": "already_finished",
+                "remote_termination": "unknown",
+                "wait_timed_out": False,
+            }
+
         if process_control == "legacy":
             if future is not None and future.cancel():
                 with self._lock:

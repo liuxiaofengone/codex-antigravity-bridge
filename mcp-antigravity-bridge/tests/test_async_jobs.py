@@ -111,12 +111,13 @@ def test_status_reports_login_required_for_authentication_failure(monkeypatch):
         registry.close()
 
 
-def test_completed_jobs_are_pruned_after_retention(monkeypatch):
+def test_completed_jobs_are_pruned_after_retention(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGY_BRIDGE_STATE_DIR", str(tmp_path))
     monkeypatch.setattr(
         "codex_agy_bridge.agy_jobs.run_agy",
         lambda *args, **kwargs: AgyResult(text="DONE", exit_code=0, used_pty=False),
     )
-    registry = AgyJobRegistry(retention_seconds=0.05)
+    registry = AgyJobRegistry(retention_seconds=0.05, store=JobStore())
     try:
         job_id = registry.start("Implement page")
         for _ in range(20):
@@ -558,6 +559,10 @@ def test_managed_cancel_does_not_kill_unrelated_job(tmp_path, monkeypatch) -> No
 
         assert status["state"] == "completed"
         assert status["text"]
+        assert created[1].cancel.is_set() is False
+        completed_cancel = registry.cancel(other)
+        assert completed_cancel["cancel_requested"] is False
+        assert completed_cancel["local_termination"] == "already_finished"
         assert created[1].cancel.is_set() is False
     finally:
         registry.close()

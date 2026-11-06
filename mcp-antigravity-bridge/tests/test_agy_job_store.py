@@ -36,6 +36,8 @@ def test_job_store_round_trip_without_prompt_or_raw_output(
         "prompt": "must not persist",
         "text": "raw output must not persist",
         "stderr": "raw error must not persist",
+        "failed_command": "curl -H 'Authorization: Bearer secret' example.test",
+        "permission_resource": "secret-permission-resource",
     }
 
     store.save(record)
@@ -47,11 +49,14 @@ def test_job_store_round_trip_without_prompt_or_raw_output(
     assert "prompt" not in loaded
     assert "text" not in loaded
     assert "stderr" not in loaded
+    assert "failed_command" not in loaded
+    assert "permission_resource" not in loaded
     stored_text = (tmp_path / "state" / "jobs" / "job-1.json").read_text(
         encoding="utf-8"
     )
     assert "must not persist" not in stored_text
     assert "raw output" not in stored_text
+    assert "secret-permission-resource" not in stored_text
 
 
 def test_job_store_missing_and_corrupt_records_are_unknown(

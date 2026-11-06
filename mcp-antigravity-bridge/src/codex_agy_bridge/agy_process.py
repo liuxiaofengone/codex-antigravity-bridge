@@ -307,7 +307,11 @@ if os.name == "nt":
             if not configured:
                 job.close()
                 return None
-            process_handle = kernel32.OpenProcess(0x0200 | 0x0400 | 0x1000, False, pid)
+            process_handle = kernel32.OpenProcess(
+                0x0001 | 0x0200 | 0x0400 | 0x1000,
+                False,
+                pid,
+            )
             if not process_handle:
                 job.close()
                 return None
